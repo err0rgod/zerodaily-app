@@ -3,12 +3,14 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   FlatList,
   LayoutChangeEvent,
+  Platform,
   RefreshControl,
   StyleSheet,
   Text,
   View,
   ViewToken,
 } from 'react-native';
+import { CATEGORIES } from '../../constants/categories';
 import { THEME } from '../../constants/theme';
 import { useFeedStore } from '../../store/feedStore';
 import { Article } from '../../types';
@@ -25,6 +27,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
 }) => {
   const {
     articles,
+    category,
     currentIndex,
     setCurrentIndex,
     refreshFeed,
@@ -35,22 +38,42 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
   const [containerHeight, setContainerHeight] = useState<number>(0);
   const flatListRef = useRef<FlatList<Article>>(null);
 
-  // Initial load on mount
+  // Initial feed load on mount
   useEffect(() => {
     loadInitialFeed();
   }, [loadInitialFeed]);
 
-  // Image prefetching for upcoming 3 cards
+  // Warm-up disk & memory image cache for all category fallback images on mount
+  useEffect(() => {
+    Object.values(CATEGORIES).forEach((cat) => {
+      if (cat.fallbackImage) {
+        Image.prefetch(cat.fallbackImage).catch(() => {});
+      }
+    });
+  }, []);
+
+  // Image prefetching for upcoming 3 cards (with category fallback support)
   useEffect(() => {
     if (articles.length > 0) {
       const nextBatch = articles.slice(currentIndex + 1, currentIndex + 4);
       nextBatch.forEach((article) => {
-        if (article.image_url) {
-          Image.prefetch(article.image_url).catch(() => {});
+        const url =
+          (article.image_url && article.image_url.trim().length > 0)
+            ? article.image_url
+            : CATEGORIES[article.category]?.fallbackImage;
+        if (url) {
+          Image.prefetch(url).catch(() => {});
         }
       });
     }
   }, [currentIndex, articles]);
+
+  // Reset scroll to top whenever category changes
+  useEffect(() => {
+    if (flatListRef.current && articles.length > 0) {
+      flatListRef.current.scrollToOffset({ offset: 0, animated: false });
+    }
+  }, [category]);
 
   // Capture container height dynamically for perfect 1-card-per-screen layout
   const handleLayout = (e: LayoutChangeEvent) => {
@@ -115,10 +138,11 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
           keyExtractor={keyExtractor}
           renderItem={renderItem}
           getItemLayout={getItemLayout}
-          pagingEnabled
+          pagingEnabled={Platform.OS === 'ios'}
           snapToInterval={containerHeight}
           snapToAlignment="start"
           decelerationRate="fast"
+          disableIntervalMomentum={true}
           showsVerticalScrollIndicator={false}
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}

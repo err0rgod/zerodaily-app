@@ -21,6 +21,7 @@ export interface CategoryMeta {
   badgeColor: string;
   accentColor: string;
   fcmTopic: string;
+  fallbackImage: string;
 }
 
 /** Article schema matching DynamoDB zerodaily-articles and API response */
