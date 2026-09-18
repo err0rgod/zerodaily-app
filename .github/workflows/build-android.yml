@@ -67,12 +67,12 @@ jobs:
       - name: 🏗️ Assemble Debug APK
         if: ${{ github.event.inputs.build_type == 'debug' || github.event.inputs.build_type == '' }}
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: ./gradlew assembleDebug -PkotlinVersion=1.9.25 --no-daemon --stacktrace
 
       - name: 🏗️ Assemble Release APK
         if: ${{ github.event.inputs.build_type == 'release' }}
         working-directory: android
-        run: ./gradlew assembleRelease --no-daemon --stacktrace
+        run: ./gradlew assembleRelease -PkotlinVersion=1.9.25 --no-daemon --stacktrace
 
       - name: 📦 Locate Generated APK
         id: find_apk
