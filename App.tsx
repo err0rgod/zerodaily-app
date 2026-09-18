@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { ErrorBoundary } from './src/components/common/ErrorBoundary';
 import { Header } from './src/components/common/Header';
 import { CardSwiper } from './src/components/feed/CardSwiper';
 import { CategoryPills } from './src/components/feed/CategoryPills';
@@ -50,57 +51,59 @@ export default function App() {
   };
 
   return (
-    <GestureHandlerRootView style={styles.root}>
-      <SafeAreaProvider>
-        <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-          <StatusBar style="light" backgroundColor={THEME.colors.background} />
+    <ErrorBoundary>
+      <GestureHandlerRootView style={styles.root}>
+        <SafeAreaProvider>
+          <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+            <StatusBar style="light" backgroundColor={THEME.colors.background} />
 
-          <View style={styles.appContainer}>
-            {/* 1. Header with brand, bell, bookmarks, settings */}
-            <Header
-              onOpenNotifications={() => setIsNotificationsOpen(true)}
-              onOpenBookmarks={() => setIsBookmarksOpen(true)}
-              onOpenSettings={() => setIsSettingsOpen(true)}
-              bookmarkCount={bookmarks.length}
+            <View style={styles.appContainer}>
+              {/* 1. Header with brand, bell, bookmarks, settings */}
+              <Header
+                onOpenNotifications={() => setIsNotificationsOpen(true)}
+                onOpenBookmarks={() => setIsBookmarksOpen(true)}
+                onOpenSettings={() => setIsSettingsOpen(true)}
+                bookmarkCount={bookmarks.length}
+              />
+
+              {/* 2. Category selection pill bar */}
+              <CategoryPills
+                activeCategory={category}
+                onSelectCategory={handleCategorySelect}
+              />
+
+              {/* 3. Core Inshorts vertical swiper feed */}
+              <CardSwiper
+                onOpenFullRoast={handleOpenFullRoast}
+                onOpenSourceLink={handleOpenSource}
+              />
+            </View>
+
+            {/* Modals & Bottom Sheets */}
+            <FullRoastModal
+              visible={isRoastModalOpen}
+              article={selectedRoastArticle}
+              onClose={() => setIsRoastModalOpen(false)}
             />
 
-            {/* 2. Category selection pill bar */}
-            <CategoryPills
-              activeCategory={category}
-              onSelectCategory={handleCategorySelect}
+            <NotificationModal
+              visible={isNotificationsOpen}
+              onClose={() => setIsNotificationsOpen(false)}
             />
 
-            {/* 3. Core Inshorts vertical swiper feed */}
-            <CardSwiper
-              onOpenFullRoast={handleOpenFullRoast}
-              onOpenSourceLink={handleOpenSource}
+            <SettingsModal
+              visible={isSettingsOpen}
+              onClose={() => setIsSettingsOpen(false)}
             />
-          </View>
 
-          {/* Modals & Bottom Sheets */}
-          <FullRoastModal
-            visible={isRoastModalOpen}
-            article={selectedRoastArticle}
-            onClose={() => setIsRoastModalOpen(false)}
-          />
-
-          <NotificationModal
-            visible={isNotificationsOpen}
-            onClose={() => setIsNotificationsOpen(false)}
-          />
-
-          <SettingsModal
-            visible={isSettingsOpen}
-            onClose={() => setIsSettingsOpen(false)}
-          />
-
-          <BookmarksModal
-            visible={isBookmarksOpen}
-            onClose={() => setIsBookmarksOpen(false)}
-          />
-        </SafeAreaView>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+            <BookmarksModal
+              visible={isBookmarksOpen}
+              onClose={() => setIsBookmarksOpen(false)}
+            />
+          </SafeAreaView>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }
 
