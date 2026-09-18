@@ -54,7 +54,7 @@ export default function App() {
     <ErrorBoundary>
       <GestureHandlerRootView style={styles.root}>
         <SafeAreaProvider>
-          <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+          <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
             <StatusBar style="light" backgroundColor={THEME.colors.background} />
 
             <View style={styles.appContainer}>

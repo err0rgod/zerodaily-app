@@ -1,9 +1,9 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Bookmark, ExternalLink, Flame, Share2 } from 'lucide-react-native';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { CATEGORIES } from '../../constants/categories';
+import { CATEGORIES, DEFAULT_FALLBACK_IMAGE } from '../../constants/categories';
 import { THEME } from '../../constants/theme';
 import { useBookmarkStore } from '../../store/bookmarkStore';
 import { Article } from '../../types';
@@ -28,6 +28,16 @@ export const NewsCard: React.FC<NewsCardProps> = ({
   const { isBookmarked, toggleBookmark } = useBookmarkStore();
   const bookmarked = isBookmarked(article.id);
   const categoryMeta = CATEGORIES[article.category] || CATEGORIES.all;
+  const fallbackImage = categoryMeta.fallbackImage || DEFAULT_FALLBACK_IMAGE;
+
+  // Track active image with graceful fallback on 404 / load error
+  const isValidUrl = Boolean(article.image_url && article.image_url.trim().length > 0);
+  const [imageUri, setImageUri] = useState<string>(isValidUrl ? article.image_url : fallbackImage);
+
+  useEffect(() => {
+    const valid = Boolean(article.image_url && article.image_url.trim().length > 0);
+    setImageUri(valid ? article.image_url : fallbackImage);
+  }, [article.image_url, fallbackImage]);
 
   const handleToggleBookmark = async () => {
     await toggleBookmark(article);
@@ -38,87 +48,94 @@ export const NewsCard: React.FC<NewsCardProps> = ({
   };
 
   return (
-    <View style={[styles.cardContainer, { height: cardHeight }]}>
-      {/* 1. Hero Image with WebP Cache & Gradient Overlay */}
-      <View style={styles.imageContainer}>
-        <Image
-          source={{ uri: article.image_url }}
-          style={styles.image}
-          contentFit="cover"
-          transition={300}
-          cachePolicy="memory-disk"
-        />
-        <LinearGradient
-          colors={['transparent', 'rgba(9, 13, 22, 0.6)', '#090D16']}
-          locations={[0.5, 0.85, 1]}
-          style={styles.gradientOverlay}
-        />
-
-        {/* Category Badge & Timestamp Badge Overlay */}
-        <View style={styles.overlayRow}>
-          <Badge
-            label={categoryMeta.name}
-            color={categoryMeta.accentColor}
-            size="sm"
+    <View style={[styles.pageWrapper, { height: cardHeight }]}>
+      <View style={styles.card}>
+        {/* 1. Hero Image with WebP Cache, Automatic Fallback & Gradient Overlay */}
+        <View style={styles.imageContainer}>
+          <Image
+            source={{ uri: imageUri }}
+            style={styles.image}
+            contentFit="cover"
+            transition={250}
+            cachePolicy="memory-disk"
+            onError={() => {
+              if (imageUri !== fallbackImage) {
+                setImageUri(fallbackImage);
+              }
+            }}
           />
-          <Text style={styles.timestampText}>{formatRelativeTime(article.published_at)}</Text>
+          <LinearGradient
+            colors={['transparent', 'rgba(15, 23, 42, 0.65)', '#0F172A']}
+            locations={[0.45, 0.85, 1]}
+            style={styles.gradientOverlay}
+          />
+
+          {/* Category Badge & Timestamp Badge Overlay */}
+          <View style={styles.overlayRow}>
+            <Badge
+              label={categoryMeta.name}
+              color={categoryMeta.accentColor}
+              size="sm"
+            />
+            <Text style={styles.timestampText}>{formatRelativeTime(article.published_at)}</Text>
+          </View>
         </View>
-      </View>
 
-      {/* 2. Headline & 60-Word Summary Body */}
-      <View style={styles.bodyContainer}>
-        <Text style={styles.heading} numberOfLines={3}>
-          {article.heading}
-        </Text>
-
-        <Text style={styles.summary} numberOfLines={6}>
-          {article.shortSummary}
-        </Text>
-
-        {/* Read Full Roast Pill Trigger */}
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={() => onOpenFullRoast(article)}
-          style={styles.fullRoastTrigger}
-        >
-          <Flame size={15} color={THEME.colors.warning} />
-          <Text style={styles.fullRoastText}>Read Full Satirical Roast</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* 3. Footer Actions (Source link, Bookmark, Share) */}
-      <View style={styles.footerContainer}>
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={() => onOpenSourceLink(article.link)}
-          style={styles.sourceButton}
-        >
-          <Text style={styles.sourceButtonText} numberOfLines={1}>
-            Source / Original
+        {/* 2. Headline & 60-Word Summary Body */}
+        <View style={styles.bodyContainer}>
+          <Text style={styles.heading} numberOfLines={3}>
+            {article.heading}
           </Text>
-          <ExternalLink size={14} color={THEME.colors.textSecondary} />
-        </TouchableOpacity>
 
-        <View style={styles.actionButtonsRow}>
-          <IconButton
-            icon={
-              <Bookmark
-                size={18}
-                color={bookmarked ? THEME.colors.primary : THEME.colors.textPrimary}
-                fill={bookmarked ? THEME.colors.primary : 'transparent'}
-              />
-            }
-            onPress={handleToggleBookmark}
-            size={38}
-            active={bookmarked}
-            style={styles.actionBtn}
-          />
-          <IconButton
-            icon={<Share2 size={18} color={THEME.colors.textPrimary} />}
-            onPress={handleShare}
-            size={38}
-            style={styles.actionBtn}
-          />
+          <Text style={styles.summary} numberOfLines={6}>
+            {article.shortSummary}
+          </Text>
+
+          {/* Read Full Roast Pill Trigger */}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => onOpenFullRoast(article)}
+            style={styles.fullRoastTrigger}
+          >
+            <Flame size={15} color={THEME.colors.warning} />
+            <Text style={styles.fullRoastText}>Read Full Satirical Roast</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* 3. Footer Actions (Source link, Bookmark, Share) */}
+        <View style={styles.footerContainer}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => onOpenSourceLink(article.link)}
+            style={styles.sourceButton}
+          >
+            <Text style={styles.sourceButtonText} numberOfLines={1}>
+              Source / Original
+            </Text>
+            <ExternalLink size={14} color={THEME.colors.textSecondary} />
+          </TouchableOpacity>
+
+          <View style={styles.actionButtonsRow}>
+            <IconButton
+              icon={
+                <Bookmark
+                  size={18}
+                  color={bookmarked ? THEME.colors.primary : THEME.colors.textPrimary}
+                  fill={bookmarked ? THEME.colors.primary : 'transparent'}
+                />
+              }
+              onPress={handleToggleBookmark}
+              size={38}
+              active={bookmarked}
+              style={styles.actionBtn}
+            />
+            <IconButton
+              icon={<Share2 size={18} color={THEME.colors.textPrimary} />}
+              onPress={handleShare}
+              size={38}
+              style={styles.actionBtn}
+            />
+          </View>
         </View>
       </View>
     </View>
@@ -126,17 +143,32 @@ export const NewsCard: React.FC<NewsCardProps> = ({
 };
 
 const styles = StyleSheet.create({
-  cardContainer: {
+  pageWrapper: {
     width: '100%',
     backgroundColor: THEME.colors.background,
+    paddingHorizontal: 10,
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
+  card: {
+    flex: 1,
+    backgroundColor: THEME.colors.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: THEME.colors.cardBorder,
+    overflow: 'hidden',
     justifyContent: 'space-between',
-    paddingBottom: 16,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
   },
   imageContainer: {
     width: '100%',
     height: '42%',
     position: 'relative',
-    backgroundColor: THEME.colors.card,
+    backgroundColor: '#1E293B',
   },
   image: {
     width: '100%',
@@ -162,10 +194,10 @@ const styles = StyleSheet.create({
     color: THEME.colors.textMuted,
     fontSize: THEME.typography.sizes.xs,
     fontWeight: '600',
-    backgroundColor: 'rgba(9, 13, 22, 0.7)',
+    backgroundColor: 'rgba(9, 13, 22, 0.75)',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 4,
+    borderRadius: 6,
   },
   bodyContainer: {
     flex: 1,
@@ -178,13 +210,13 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: THEME.colors.textPrimary,
     lineHeight: 28,
-    marginBottom: 10,
+    marginBottom: 8,
     letterSpacing: -0.3,
   },
   summary: {
     fontSize: THEME.typography.sizes.base,
     color: THEME.colors.textSecondary,
-    lineHeight: 23,
+    lineHeight: 22,
     letterSpacing: 0.1,
   },
   fullRoastTrigger: {
@@ -197,7 +229,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: THEME.radii.sm,
-    marginTop: 14,
+    marginTop: 12,
     gap: 6,
   },
   fullRoastText: {
@@ -210,9 +242,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: THEME.spacing.md,
-    paddingTop: 8,
+    paddingVertical: 10,
     borderTopWidth: 1,
     borderTopColor: THEME.colors.border,
+    backgroundColor: THEME.colors.card,
   },
   sourceButton: {
     flexDirection: 'row',
