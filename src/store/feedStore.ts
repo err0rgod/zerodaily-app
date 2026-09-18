@@ -1,0 +1,202 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { create } from 'zustand';
+import { fetchFeed } from '../api/client';
+import { MOCK_ARTICLES } from '../api/mockData';
+import { Article, CategoryKey } from '../types';
+
+const STORAGE_CACHE_KEY_PREFIX = '@zerodaily_feed_cache_';
+const PREFETCH_THRESHOLD = 8; // Fetch next batch when remaining cards <= 8
+
+interface FeedState {
+  category: CategoryKey;
+  articles: Article[];
+  currentIndex: number;
+  cursor: string | null;
+  hasMore: boolean;
+  isLoading: boolean;
+  isRefreshing: boolean;
+  isPrefetching: boolean;
+
+  // Actions
+  setCategory: (category: CategoryKey) => Promise<void>;
+  setCurrentIndex: (index: number) => void;
+  loadInitialFeed: (category?: CategoryKey) => Promise<void>;
+  refreshFeed: () => Promise<void>;
+  prefetchNextBatch: () => Promise<void>;
+  setArticleDirectly: (article: Article) => void;
+}
+
+export const useFeedStore = create<FeedState>((set, get) => ({
+  category: 'all',
+  articles: MOCK_ARTICLES, // Seeded with mock data for instant 0ms cold boot
+  currentIndex: 0,
+  cursor: null,
+  hasMore: true,
+  isLoading: false,
+  isRefreshing: false,
+  isPrefetching: false,
+
+  setCategory: async (category: CategoryKey) => {
+    if (get().category === category && get().articles.length > 0) return;
+
+    set({ category, currentIndex: 0, isLoading: true, cursor: null, hasMore: true });
+
+    // Try loading local cached batch for this category
+    try {
+      const cached = await AsyncStorage.getItem(`${STORAGE_CACHE_KEY_PREFIX}${category}`);
+      if (cached) {
+        const parsed = JSON.parse(cached) as Article[];
+        if (parsed && parsed.length > 0) {
+          set({ articles: parsed, isLoading: false });
+        }
+      }
+    } catch {
+      // Ignore cache read failures
+    }
+
+    // Background network sync
+    try {
+      const res = await fetchFeed(category);
+      if (res.data && res.data.length > 0) {
+        set({
+          articles: res.data,
+          cursor: res.pagination.next_cursor,
+          hasMore: res.pagination.has_more,
+          isLoading: false,
+        });
+        await AsyncStorage.setItem(
+          `${STORAGE_CACHE_KEY_PREFIX}${category}`,
+          JSON.stringify(res.data)
+        );
+      }
+    } catch {
+      set({ isLoading: false });
+    }
+  },
+
+  setCurrentIndex: (index: number) => {
+    set({ currentIndex: index });
+
+    // Check N - 8 Prefetch Rule from Docs.md
+    const { articles, isPrefetching, hasMore } = get();
+    const remaining = articles.length - index;
+
+    if (remaining <= PREFETCH_THRESHOLD && hasMore && !isPrefetching) {
+      get().prefetchNextBatch();
+    }
+  },
+
+  loadInitialFeed: async (targetCategory?: CategoryKey) => {
+    const category = targetCategory || get().category;
+    set({ isLoading: true });
+
+    // 1. Try restore from disk
+    try {
+      const cached = await AsyncStorage.getItem(`${STORAGE_CACHE_KEY_PREFIX}${category}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          set({ articles: parsed, isLoading: false });
+        }
+      }
+    } catch {
+      // Disk error fallback
+    }
+
+    // 2. Fetch fresh articles from network
+    try {
+      const res = await fetchFeed(category);
+      if (res.data && res.data.length > 0) {
+        set({
+          articles: res.data,
+          cursor: res.pagination.next_cursor,
+          hasMore: res.pagination.has_more,
+          isLoading: false,
+        });
+        await AsyncStorage.setItem(
+          `${STORAGE_CACHE_KEY_PREFIX}${category}`,
+          JSON.stringify(res.data)
+        );
+      } else {
+        set({ isLoading: false });
+      }
+    } catch {
+      set({ isLoading: false });
+    }
+  },
+
+  refreshFeed: async () => {
+    const { category } = get();
+    set({ isRefreshing: true });
+
+    try {
+      const res = await fetchFeed(category);
+      if (res.data && res.data.length > 0) {
+        set({
+          articles: res.data,
+          currentIndex: 0,
+          cursor: res.pagination.next_cursor,
+          hasMore: res.pagination.has_more,
+          isRefreshing: false,
+        });
+        await AsyncStorage.setItem(
+          `${STORAGE_CACHE_KEY_PREFIX}${category}`,
+          JSON.stringify(res.data)
+        );
+      } else {
+        set({ isRefreshing: false });
+      }
+    } catch {
+      set({ isRefreshing: false });
+    }
+  },
+
+  prefetchNextBatch: async () => {
+    const { category, cursor, hasMore, isPrefetching, articles } = get();
+    if (!hasMore || isPrefetching || !cursor) return;
+
+    set({ isPrefetching: true });
+
+    try {
+      const res = await fetchFeed(category, cursor);
+      if (res.data && res.data.length > 0) {
+        // Deduplicate incoming articles by ID
+        const existingIds = new Set(articles.map((a) => a.id));
+        const fresh = res.data.filter((a) => !existingIds.has(a.id));
+
+        const updated = [...articles, ...fresh];
+        set({
+          articles: updated,
+          cursor: res.pagination.next_cursor,
+          hasMore: res.pagination.has_more,
+          isPrefetching: false,
+        });
+
+        // Update local disk cache
+        AsyncStorage.setItem(
+          `${STORAGE_CACHE_KEY_PREFIX}${category}`,
+          JSON.stringify(updated.slice(0, 50))
+        ).catch(() => {});
+      } else {
+        set({ hasMore: false, isPrefetching: false });
+      }
+    } catch {
+      set({ isPrefetching: false });
+    }
+  },
+
+  setArticleDirectly: (article: Article) => {
+    const { articles } = get();
+    const existingIndex = articles.findIndex((a) => a.id === article.id);
+
+    if (existingIndex >= 0) {
+      set({ currentIndex: existingIndex });
+    } else {
+      // Prepend to top and focus
+      set({
+        articles: [article, ...articles],
+        currentIndex: 0,
+      });
+    }
+  },
+}));
