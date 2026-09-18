@@ -1,7 +1,7 @@
-import { Bell, Bookmark, Settings } from 'lucide-react-native';
+import { Bell, Bookmark, Moon, Settings, Sun } from 'lucide-react-native';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { THEME } from '../../constants/theme';
+import { useTheme } from '../../store/themeStore';
 import { IconButton } from './IconButton';
 
 interface HeaderProps {
@@ -17,37 +17,56 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSettings,
   bookmarkCount = 0,
 }) => {
+  const { colors, isDark, toggleTheme } = useTheme();
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
       <View style={styles.brandRow}>
-        <View style={styles.liveIndicator} />
-        <Text style={styles.logoText}>ZERODAILY</Text>
+        <View style={[styles.liveIndicator, { backgroundColor: colors.primary, shadowColor: colors.primary }]} />
+        <Text style={[styles.logoText, { color: colors.textPrimary }]}>ZERODAILY</Text>
       </View>
 
       <View style={styles.actionsRow}>
+        {/* Quick 1-Tap Theme Switcher (Dark <-> Light) */}
         <IconButton
-          icon={<Bell size={18} color={THEME.colors.textPrimary} />}
+          icon={isDark ? <Sun size={17} color={colors.textPrimary} /> : <Moon size={17} color={colors.textPrimary} />}
+          onPress={toggleTheme}
+          size={36}
+          style={styles.actionBtn}
+        />
+
+        {/* Notifications */}
+        <IconButton
+          icon={<Bell size={17} color={colors.textPrimary} />}
           onPress={onOpenNotifications}
           size={36}
           style={styles.actionBtn}
         />
 
+        {/* Bookmarks */}
         <View>
           <IconButton
-            icon={<Bookmark size={18} color={bookmarkCount > 0 ? THEME.colors.primary : THEME.colors.textPrimary} />}
+            icon={
+              <Bookmark
+                size={17}
+                color={bookmarkCount > 0 ? colors.primary : colors.textPrimary}
+                fill={bookmarkCount > 0 ? colors.primary : 'transparent'}
+              />
+            }
             onPress={onOpenBookmarks}
             size={36}
             style={styles.actionBtn}
           />
           {bookmarkCount > 0 && (
-            <View style={styles.counterBadge}>
+            <View style={[styles.counterBadge, { backgroundColor: colors.primary }]}>
               <Text style={styles.counterText}>{bookmarkCount > 9 ? '9+' : bookmarkCount}</Text>
             </View>
           )}
         </View>
 
+        {/* Settings */}
         <IconButton
-          icon={<Settings size={18} color={THEME.colors.textPrimary} />}
+          icon={<Settings size={17} color={colors.textPrimary} />}
           onPress={onOpenSettings}
           size={36}
           style={styles.actionBtn}
@@ -62,31 +81,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: THEME.spacing.md,
+    paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: THEME.colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: THEME.colors.border,
   },
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   liveIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: THEME.colors.primary,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
     marginRight: 8,
-    shadowColor: THEME.colors.primary,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 6,
+    shadowOpacity: 0.9,
+    shadowRadius: 5,
+    elevation: 2,
   },
   logoText: {
-    fontSize: THEME.typography.sizes.lg,
+    fontSize: 18,
     fontWeight: '900',
-    color: THEME.colors.textPrimary,
     letterSpacing: 2,
   },
   actionsRow: {
@@ -94,13 +109,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   actionBtn: {
-    marginLeft: 8,
+    marginLeft: 6,
   },
   counterBadge: {
     position: 'absolute',
     top: -2,
     right: -2,
-    backgroundColor: THEME.colors.primary,
     borderRadius: 8,
     minWidth: 16,
     height: 16,
@@ -109,7 +123,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   counterText: {
-    color: '#000000',
+    color: '#FFFFFF',
     fontSize: 9,
     fontWeight: '800',
   },

@@ -1,5 +1,7 @@
 import { CATEGORIES, CATEGORY_LIST } from '../src/constants/categories';
+import { DARK_THEME, LIGHT_THEME } from '../src/constants/theme';
 import { formatRelativeTime } from '../src/utils/date';
+import { extractDomain, getReadingEstimate } from '../src/utils/url';
 
 describe('ZeroDaily Taxonomy & Notification Topic Mappings', () => {
   test('all 6 core tech domains plus all-feed are registered', () => {
@@ -25,5 +27,30 @@ describe('Date & Relative Time Utility', () => {
 
     expect(formatRelativeTime(tenMinAgo)).toBe('10m ago');
     expect(formatRelativeTime(twoHoursAgo)).toBe('2h ago');
+  });
+});
+
+describe('Editorial URL & Reading Utilities', () => {
+  test('extracts clean publisher domain from URLs', () => {
+    expect(extractDomain('https://www.tomshardware.com/tech/news-123')).toBe('tomshardware.com');
+    expect(extractDomain('https://dev.to/username/article-title')).toBe('dev.to');
+    expect(extractDomain('https://techcrunch.com/2026/09/18/story/')).toBe('techcrunch.com');
+    expect(extractDomain('')).toBe('Source');
+  });
+
+  test('calculates reading estimate accurately', () => {
+    const shortText = 'In a stunning display of corporate energy efficiency, a company kept reports.';
+    expect(getReadingEstimate(shortText)).toBe('60s read');
+  });
+});
+
+describe('Theme Palettes & Dual-Mode Contrast', () => {
+  test('dark and light themes have distinct background and card values', () => {
+    expect(DARK_THEME.colors.background).toBe('#090A0F');
+    expect(LIGHT_THEME.colors.background).toBe('#F1F3F6');
+    expect(DARK_THEME.colors.card).toBe('#11141F');
+    expect(LIGHT_THEME.colors.card).toBe('#FFFFFF');
+    expect(DARK_THEME.colors.statusBarStyle).toBe('light');
+    expect(LIGHT_THEME.colors.statusBarStyle).toBe('dark');
   });
 });

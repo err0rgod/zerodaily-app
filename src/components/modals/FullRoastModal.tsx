@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { CATEGORIES } from '../../constants/categories';
-import { THEME } from '../../constants/theme';
+import { useTheme } from '../../store/themeStore';
 import { Article } from '../../types';
 import { Badge } from '../common/Badge';
 
@@ -25,9 +25,12 @@ export const FullRoastModal: React.FC<FullRoastModalProps> = ({
   visible,
   onClose,
 }) => {
+  const { colors } = useTheme();
+
   if (!article) return null;
 
   const categoryMeta = CATEGORIES[article.category] || CATEGORIES.all;
+  const categoryAccent = colors[article.category] || categoryMeta.accentColor;
   const paragraphs = article.fullSummary.split('\n\n');
 
   return (
@@ -37,16 +40,16 @@ export const FullRoastModal: React.FC<FullRoastModalProps> = ({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.container}>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
           {/* Header */}
-          <View style={styles.header}>
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <View style={styles.titleRow}>
-              <Flame size={20} color={THEME.colors.warning} />
-              <Text style={styles.modalTitle}>Full Roast Breakdown</Text>
+              <Flame size={20} color={colors.warning} />
+              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Full Roast Breakdown</Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <X size={20} color={THEME.colors.textPrimary} />
+            <TouchableOpacity onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.surface }]}>
+              <X size={20} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
 
@@ -59,17 +62,17 @@ export const FullRoastModal: React.FC<FullRoastModalProps> = ({
             <View style={styles.metaRow}>
               <Badge
                 label={categoryMeta.name}
-                color={categoryMeta.accentColor}
+                color={categoryAccent}
                 size="md"
               />
             </View>
 
             {/* Headline */}
-            <Text style={styles.headline}>{article.heading}</Text>
+            <Text style={[styles.headline, { color: colors.textPrimary }]}>{article.heading}</Text>
 
             {/* Paragraphs */}
             {paragraphs.map((p, idx) => (
-              <Text key={idx} style={styles.paragraph}>
+              <Text key={idx} style={[styles.paragraph, { color: colors.textSecondary }]}>
                 {p}
               </Text>
             ))}
@@ -83,20 +86,17 @@ export const FullRoastModal: React.FC<FullRoastModalProps> = ({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
   },
   container: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: THEME.spacing.md,
+    paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: THEME.colors.border,
   },
   titleRow: {
     flexDirection: 'row',
@@ -104,36 +104,34 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   modalTitle: {
-    fontSize: THEME.typography.sizes.lg,
+    fontSize: 18,
     fontWeight: '700',
-    color: THEME.colors.textPrimary,
   },
   closeBtn: {
     padding: 6,
-    borderRadius: THEME.radii.full,
-    backgroundColor: THEME.colors.surface,
+    borderRadius: 9999,
   },
   scrollArea: {
     flex: 1,
   },
   contentContainer: {
-    padding: THEME.spacing.md,
+    padding: 16,
     paddingBottom: 40,
   },
   metaRow: {
     marginBottom: 12,
   },
   headline: {
-    fontSize: THEME.typography.sizes.xxl,
+    fontSize: 24,
     fontWeight: '800',
-    color: THEME.colors.textPrimary,
-    lineHeight: 34,
+    lineHeight: 33,
     marginBottom: 20,
+    letterSpacing: -0.4,
   },
   paragraph: {
-    fontSize: THEME.typography.sizes.base,
-    color: THEME.colors.textSecondary,
+    fontSize: 15.5,
     lineHeight: 26,
     marginBottom: 16,
+    letterSpacing: 0.1,
   },
 });

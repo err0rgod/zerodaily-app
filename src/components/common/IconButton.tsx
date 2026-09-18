@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import React from 'react';
 import { Platform, StyleSheet, TouchableOpacity, ViewStyle } from 'react-native';
-import { THEME } from '../../constants/theme';
+import { useTheme } from '../../store/themeStore';
 
 interface IconButtonProps {
   icon: React.ReactNode;
@@ -18,6 +18,8 @@ export const IconButton: React.FC<IconButtonProps> = ({
   style,
   active = false,
 }) => {
+  const { colors } = useTheme();
+
   const handlePress = () => {
     if (Platform.OS !== 'web') {
       Haptics.selectionAsync().catch(() => {});
@@ -35,8 +37,8 @@ export const IconButton: React.FC<IconButtonProps> = ({
           width: size,
           height: size,
           borderRadius: size / 2,
-          backgroundColor: active ? THEME.colors.surfaceHover : THEME.colors.surface,
-          borderColor: active ? THEME.colors.primary : THEME.colors.border,
+          backgroundColor: active ? colors.surfaceHover : colors.surface,
+          borderColor: active ? colors.primary : colors.border,
         },
         style,
       ]}
