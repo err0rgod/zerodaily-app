@@ -1,12 +1,13 @@
+import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Bookmark, ChevronRight, ExternalLink, Flame, Globe, Share2 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { CATEGORIES, DEFAULT_FALLBACK_IMAGE, getDynamicFallbackImage } from '../../constants/categories';
 import { useBookmarkStore } from '../../store/bookmarkStore';
 import { useTheme } from '../../store/themeStore';
-import { Article } from '../../types';
+import { Article, CategoryKey } from '../../types';
 import { formatRelativeTime } from '../../utils/date';
 import { shareArticle } from '../../utils/share';
 import { extractDomain, getReadingEstimate } from '../../utils/url';
@@ -17,6 +18,7 @@ interface NewsCardProps {
   cardHeight: number;
   onOpenFullRoast: (article: Article) => void;
   onOpenSourceLink: (url: string) => void;
+  onOpenImageViewer?: (imageUri: string, heading: string, category: CategoryKey) => void;
 }
 
 export const NewsCard: React.FC<NewsCardProps> = ({
@@ -24,6 +26,7 @@ export const NewsCard: React.FC<NewsCardProps> = ({
   cardHeight,
   onOpenFullRoast,
   onOpenSourceLink,
+  onOpenImageViewer,
 }) => {
   const { colors, isDark } = useTheme();
   const { isBookmarked, toggleBookmark } = useBookmarkStore();
@@ -74,8 +77,18 @@ export const NewsCard: React.FC<NewsCardProps> = ({
           },
         ]}
       >
-        {/* 1. Hero Image with WebP Cache, Error Fallback & Adaptive Gradient Scrim */}
-        <View style={[styles.imageContainer, { backgroundColor: isDark ? '#161B28' : '#E2E8F0' }]}>
+        {/* 1. Hero Image with 1.5s Long-Press Zoom, Error Fallback & Adaptive Gradient Scrim */}
+        <TouchableOpacity
+          activeOpacity={0.94}
+          delayLongPress={1500}
+          onLongPress={() => {
+            if (Platform.OS !== 'web') {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+            }
+            onOpenImageViewer?.(imageUri, article.heading, article.category);
+          }}
+          style={[styles.imageContainer, { backgroundColor: isDark ? '#161B28' : '#E2E8F0' }]}
+        >
           <Image
             source={{ uri: imageUri }}
             style={styles.image}
@@ -94,15 +107,10 @@ export const NewsCard: React.FC<NewsCardProps> = ({
             style={styles.gradientOverlay}
           />
 
-          {/* Floating Metadata Pill Row: ZERODAILY brand + Category domain chip */}
+          {/* Floating Metadata Pill Row: ZERODAILY brand only + Reading metrics */}
           <View style={styles.overlayRow}>
-            <View style={[styles.brandBadge, { borderColor: `${categoryAccent}60` }]}>
-              <View style={[styles.brandDot, { backgroundColor: colors.primary }]} />
+            <View style={styles.brandBadge}>
               <Text style={styles.brandTitle}>ZERODAILY</Text>
-              <Text style={styles.brandDivider}>•</Text>
-              <Text style={[styles.categoryTitle, { color: categoryAccent }]}>
-                {categoryMeta.name.toUpperCase()}
-              </Text>
             </View>
 
             <View style={styles.metaChip}>
@@ -111,7 +119,7 @@ export const NewsCard: React.FC<NewsCardProps> = ({
               <Text style={styles.metaChipText}>{relativeTime}</Text>
             </View>
           </View>
-        </View>
+        </TouchableOpacity>
 
         {/* 2. Editorial Headline & Fully Extended Summary Body */}
         <View style={styles.bodyContainer}>
@@ -256,34 +264,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   brandBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(9, 11, 17, 0.78)',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+    backgroundColor: 'rgba(9, 11, 17, 0.82)',
+    paddingHorizontal: 10,
+    paddingVertical: 4.5,
     borderRadius: 9999,
     borderWidth: 1,
-    gap: 5,
-  },
-  brandDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
   },
   brandTitle: {
     color: '#FFFFFF',
     fontSize: 10.5,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-  },
-  brandDivider: {
-    color: '#64748B',
-    fontSize: 9,
-  },
-  categoryTitle: {
-    fontSize: 10.5,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontWeight: '900',
+    letterSpacing: 1.1,
   },
   metaChip: {
     flexDirection: 'row',

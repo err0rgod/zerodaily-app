@@ -9,6 +9,7 @@ import { CardSwiper } from './src/components/feed/CardSwiper';
 import { CategoryPills } from './src/components/feed/CategoryPills';
 import { BookmarksModal } from './src/components/modals/BookmarksModal';
 import { FullRoastModal } from './src/components/modals/FullRoastModal';
+import { ImageViewerModal } from './src/components/modals/ImageViewerModal';
 import { NotificationModal } from './src/components/modals/NotificationModal';
 import { SearchModal } from './src/components/modals/SearchModal';
 import { SettingsModal } from './src/components/modals/SettingsModal';
@@ -34,6 +35,7 @@ export default function App() {
   // Modal & Navigation states
   const [activeTab, setActiveTab] = useState<BottomNavTab>('home');
   const [selectedRoastArticle, setSelectedRoastArticle] = useState<Article | null>(null);
+  const [viewerImage, setViewerImage] = useState<{ uri: string; heading: string; category: CategoryKey } | null>(null);
   const [isRoastModalOpen, setIsRoastModalOpen] = useState<boolean>(false);
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
@@ -100,6 +102,7 @@ export default function App() {
               <CardSwiper
                 onOpenFullRoast={handleOpenFullRoast}
                 onOpenSourceLink={handleOpenSource}
+                onOpenImageViewer={(uri, heading, cat) => setViewerImage({ uri, heading, category: cat })}
               />
 
               {/* 3. 5-Option Bottom Navigation Bar (Search, Notifications, Home, Settings, Saved) */}
@@ -112,6 +115,13 @@ export default function App() {
             </View>
 
             {/* Modals & Overlays */}
+            <ImageViewerModal
+              visible={viewerImage !== null}
+              imageUri={viewerImage?.uri ?? null}
+              heading={viewerImage?.heading}
+              category={viewerImage?.category}
+              onClose={() => setViewerImage(null)}
+            />
             <SearchModal
               visible={isSearchOpen}
               onClose={() => {

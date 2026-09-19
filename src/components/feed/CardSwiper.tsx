@@ -16,17 +16,19 @@ import {
 import { CATEGORIES, getDynamicFallbackImage } from '../../constants/categories';
 import { useFeedStore } from '../../store/feedStore';
 import { useTheme } from '../../store/themeStore';
-import { Article } from '../../types';
+import { Article, CategoryKey } from '../../types';
 import { NewsCard } from './NewsCard';
 
 interface CardSwiperProps {
   onOpenFullRoast: (article: Article) => void;
   onOpenSourceLink: (url: string) => void;
+  onOpenImageViewer?: (imageUri: string, heading: string, category: CategoryKey) => void;
 }
 
 export const CardSwiper: React.FC<CardSwiperProps> = ({
   onOpenFullRoast,
   onOpenSourceLink,
+  onOpenImageViewer,
 }) => {
   const {
     articles,
@@ -456,6 +458,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
               cardHeight={cardRenderHeight}
               onOpenFullRoast={onOpenFullRoast}
               onOpenSourceLink={onOpenSourceLink}
+              onOpenImageViewer={onOpenImageViewer}
             />
             <Animated.View
               style={[
@@ -488,6 +491,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
               cardHeight={cardRenderHeight}
               onOpenFullRoast={onOpenFullRoast}
               onOpenSourceLink={onOpenSourceLink}
+              onOpenImageViewer={onOpenImageViewer}
             />
             <Animated.View
               style={[
@@ -517,6 +521,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
             cardHeight={cardRenderHeight}
             onOpenFullRoast={onOpenFullRoast}
             onOpenSourceLink={onOpenSourceLink}
+            onOpenImageViewer={onOpenImageViewer}
           />
         </Animated.View>
       </View>

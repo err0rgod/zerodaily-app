@@ -13,7 +13,7 @@ export const CategoryPills: React.FC<CategoryPillsProps> = ({
   activeCategory,
   onSelectCategory,
 }) => {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
 
   return (
     <View style={[styles.wrapper, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
@@ -39,12 +39,6 @@ export const CategoryPills: React.FC<CategoryPillsProps> = ({
                 },
               ]}
             >
-              <View
-                style={[
-                  styles.indicator,
-                  { backgroundColor: isActive ? accent : colors.textMuted },
-                ]}
-              />
               <Text
                 style={[
                   styles.pillText,
@@ -75,16 +69,10 @@ const styles = StyleSheet.create({
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 9999,
     borderWidth: 1,
-  },
-  indicator: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 6,
   },
   pillText: {
     fontSize: 12.5,

@@ -12,7 +12,6 @@ export const Badge: React.FC<BadgeProps> = ({ label, color = '#10B981', size = '
 
   return (
     <View style={[styles.container, { borderColor: `${color}55`, backgroundColor: 'rgba(9, 11, 17, 0.72)' }]}>
-      <View style={[styles.dot, { backgroundColor: color }]} />
       <Text style={[styles.text, { color }, isSm ? styles.textSm : styles.textMd]}>
         {label.toUpperCase()}
       </Text>
@@ -24,17 +23,11 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 9,
     paddingVertical: 3.5,
     borderRadius: 9999,
     borderWidth: 1,
     alignSelf: 'flex-start',
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 5,
   },
   text: {
     fontWeight: '700',
@@ -44,6 +37,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
   },
   textMd: {
-    fontSize: 11.5,
+    fontSize: 12,
   },
 });
