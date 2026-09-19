@@ -68,12 +68,7 @@ export default function App() {
         setIsNotificationsOpen(true);
         break;
       case 'home':
-        if (currentIndex > 0) {
-          setCurrentIndex(0);
-        } else {
-          // If already at top story, rotating/refreshing shows a fresh article immediately
-          refreshFeed();
-        }
+        setCurrentIndex(0);
         break;
       case 'settings':
         setIsSettingsOpen(true);

@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { ArrowDown, ArrowUp, RotateCcw } from 'lucide-react-native';
+import { RotateCcw } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -10,7 +10,6 @@ import {
   Platform,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { CATEGORIES, getDynamicFallbackImage } from '../../constants/categories';
@@ -80,11 +79,12 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     }
   }, [currentIndex, articles]);
 
-  // Reset animation and active index to 0 when category changes
+  // Reset animation and pan position when category or active index changes externally (e.g. Home button click)
   useEffect(() => {
+    panY.stopAnimation();
     panY.setValue(0);
     isAnimating.current = false;
-  }, [category, panY]);
+  }, [category, currentIndex, panY]);
 
   // Capture container height dynamically for pixel-perfect card sizing
   const handleLayout = (e: LayoutChangeEvent) => {
@@ -450,54 +450,6 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
               />
             </Animated.View>
           )}
-
-          {/* Floating Web Navigation Controls for Desktop Testing */}
-          {Platform.OS === 'web' && articles.length > 1 && (
-            <View style={styles.webControls}>
-              <TouchableOpacity
-                activeOpacity={0.7}
-                onPress={goToPrevCard}
-                disabled={currentIndex === 0}
-                style={[
-                  styles.webNavBtn,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    opacity: currentIndex === 0 ? 0.4 : 0.92,
-                  },
-                ]}
-              >
-                <ArrowUp size={15} color={colors.textPrimary} />
-              </TouchableOpacity>
-
-              <View
-                style={[
-                  styles.webCounterBadge,
-                  { backgroundColor: colors.surface, borderColor: colors.border },
-                ]}
-              >
-                <Text style={[styles.webCounterText, { color: colors.textSecondary }]}>
-                  {currentIndex + 1}/{articles.length}
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                activeOpacity={0.7}
-                onPress={goToNextCard}
-                disabled={currentIndex >= articles.length - 1}
-                style={[
-                  styles.webNavBtn,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    opacity: currentIndex >= articles.length - 1 ? 0.4 : 0.92,
-                  },
-                ]}
-              >
-                <ArrowDown size={15} color={colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-          )}
         </View>
       )}
     </View>
@@ -566,38 +518,5 @@ const styles = StyleSheet.create({
   emptySub: {
     fontSize: 13,
     textAlign: 'center',
-  },
-  webControls: {
-    position: 'absolute',
-    right: 22,
-    bottom: 24,
-    zIndex: 99,
-    alignItems: 'center',
-    gap: 6,
-  },
-  webNavBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  webCounterBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 9999,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  webCounterText: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
   },
 });
