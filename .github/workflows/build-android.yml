@@ -99,7 +99,7 @@ jobs:
         working-directory: android
         run: ./gradlew assembleDebug -PkotlinVersion=1.9.25 --no-daemon --stacktrace
 
-      - name: 📦 Prepare Direct APK File, Checksums & Source Archives
+      - name: 📦 Prepare Direct APK File & Checksums
         id: prepare_assets
         run: |
           RAW_APK=$(find android/app/build/outputs/apk -name "*.apk" | head -n 1)
@@ -113,7 +113,7 @@ jobs:
 
           TAG_NAME="${{ steps.release_version.outputs.tag }}"
 
-          # 1. Generate SHA256 Checksums (.txt)
+          # Generate SHA256 Checksums (.txt)
           cd build_output
           sha256sum ZeroDaily.apk > ZeroDaily-SHA256.txt
           echo "Commit SHA: ${{ github.sha }}" >> ZeroDaily-SHA256.txt
@@ -121,10 +121,6 @@ jobs:
           echo "Build Timestamp UTC: $(date -u)" >> ZeroDaily-SHA256.txt
           cat ZeroDaily-SHA256.txt
           cd ..
-
-          # 2. Package Clean Source Code Archives (.zip and .tar.gz)
-          git archive --format=zip --output=build_output/source-code.zip HEAD
-          git archive --format=tar.gz --output=build_output/source-code.tar.gz HEAD
 
       - name: 🏷️ Publish GitHub Release
         uses: softprops/action-gh-release@v2
@@ -140,13 +136,9 @@ jobs:
             #### 📦 Release Assets Included:
             - `ZeroDaily.apk` — Standalone Android Release APK
             - `ZeroDaily-SHA256.txt` — SHA256 Checksum and Git Commit verification
-            - `source-code.zip` — Source code archive (.zip)
-            - `source-code.tar.gz` — Source code archive (.tar.gz)
           files: |
             build_output/ZeroDaily.apk
             build_output/ZeroDaily-SHA256.txt
-            build_output/source-code.zip
-            build_output/source-code.tar.gz
           draft: false
           prerelease: false
         env:
