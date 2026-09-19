@@ -126,28 +126,45 @@ export const useFeedStore = create<FeedState>((set, get) => ({
   },
 
   refreshFeed: async () => {
-    const { category } = get();
+    const { category, articles: currentArticles } = get();
     set({ isRefreshing: true });
 
     try {
       const res = await fetchFeed(category);
-      if (res.data && res.data.length > 0) {
+      const incoming = res.data && res.data.length > 0 ? res.data : currentArticles;
+      if (incoming && incoming.length > 0) {
+        // Rotate or shift the feed so the user sees a fresh/different top article every time they refresh
+        const currentTopId = currentArticles[0]?.id;
+        let freshArticles = [...incoming];
+        if (incoming.length > 1) {
+          // Pick an offset so the top article changes
+          const shift = Math.floor(Math.random() * (incoming.length - 1)) + 1;
+          freshArticles = [...incoming.slice(shift), ...incoming.slice(0, shift)];
+        }
+
         set({
-          articles: res.data,
+          articles: freshArticles,
           currentIndex: 0,
-          cursor: res.pagination.next_cursor,
-          hasMore: res.pagination.has_more,
+          cursor: res.pagination?.next_cursor || null,
+          hasMore: res.pagination?.has_more ?? true,
           isRefreshing: false,
         });
         await AsyncStorage.setItem(
           `${STORAGE_CACHE_KEY_PREFIX}${category}`,
-          JSON.stringify(res.data)
+          JSON.stringify(freshArticles)
         );
       } else {
         set({ isRefreshing: false });
       }
     } catch {
-      set({ isRefreshing: false });
+      // If offline on refresh, rotate local stories to give immediate fresh article feedback
+      if (currentArticles.length > 1) {
+        const shift = Math.floor(Math.random() * (currentArticles.length - 1)) + 1;
+        const rotated = [...currentArticles.slice(shift), ...currentArticles.slice(0, shift)];
+        set({ articles: rotated, currentIndex: 0, isRefreshing: false });
+      } else {
+        set({ isRefreshing: false });
+      }
     }
   },
 

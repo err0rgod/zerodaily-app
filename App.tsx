@@ -3,13 +3,14 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { BottomNav, BottomNavTab } from './src/components/common/BottomNav';
 import { ErrorBoundary } from './src/components/common/ErrorBoundary';
-import { Header } from './src/components/common/Header';
 import { CardSwiper } from './src/components/feed/CardSwiper';
 import { CategoryPills } from './src/components/feed/CategoryPills';
 import { BookmarksModal } from './src/components/modals/BookmarksModal';
 import { FullRoastModal } from './src/components/modals/FullRoastModal';
 import { NotificationModal } from './src/components/modals/NotificationModal';
+import { SearchModal } from './src/components/modals/SearchModal';
 import { SettingsModal } from './src/components/modals/SettingsModal';
 import { openArticleSource } from './src/components/webview/ArticleReader';
 import { useNotifications } from './src/hooks/useNotifications';
@@ -27,12 +28,14 @@ export default function App() {
   const initTheme = useThemeStore((s) => s.initTheme);
 
   // Store access
-  const { category, setCategory } = useFeedStore();
+  const { category, setCategory, currentIndex, setCurrentIndex, refreshFeed } = useFeedStore();
   const { bookmarks, loadBookmarks } = useBookmarkStore();
 
-  // Modal visibility states
+  // Modal & Navigation states
+  const [activeTab, setActiveTab] = useState<BottomNavTab>('home');
   const [selectedRoastArticle, setSelectedRoastArticle] = useState<Article | null>(null);
   const [isRoastModalOpen, setIsRoastModalOpen] = useState<boolean>(false);
+  const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isBookmarksOpen, setIsBookmarksOpen] = useState<boolean>(false);
@@ -55,36 +58,73 @@ export default function App() {
     await setCategory(newCategory);
   };
 
+  const handleTabPress = (tab: BottomNavTab) => {
+    setActiveTab(tab);
+    switch (tab) {
+      case 'search':
+        setIsSearchOpen(true);
+        break;
+      case 'notifications':
+        setIsNotificationsOpen(true);
+        break;
+      case 'home':
+        if (currentIndex > 0) {
+          setCurrentIndex(0);
+        } else {
+          // If already at top story, rotating/refreshing shows a fresh article immediately
+          refreshFeed();
+        }
+        break;
+      case 'settings':
+        setIsSettingsOpen(true);
+        break;
+      case 'saved':
+        setIsBookmarksOpen(true);
+        break;
+    }
+  };
+
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={[styles.root, { backgroundColor: colors.background }]}>
         <SafeAreaProvider>
-          <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'left', 'right', 'bottom']}>
+          <SafeAreaView
+            style={[styles.safeArea, { backgroundColor: colors.background }]}
+            edges={['top', 'left', 'right', 'bottom']}
+          >
             <StatusBar style={isDark ? 'light' : 'dark'} backgroundColor={colors.background} />
 
             <View style={[styles.appContainer, { backgroundColor: colors.background }]}>
-              {/* 1. Header with brand, theme toggle, bell, bookmarks, settings */}
-              <Header
-                onOpenNotifications={() => setIsNotificationsOpen(true)}
-                onOpenBookmarks={() => setIsBookmarksOpen(true)}
-                onOpenSettings={() => setIsSettingsOpen(true)}
-                bookmarkCount={bookmarks.length}
-              />
-
-              {/* 2. Category selection pill bar */}
+              {/* 1. Category selection pill bar directly below top safe area */}
               <CategoryPills
                 activeCategory={category}
                 onSelectCategory={handleCategorySelect}
               />
 
-              {/* 3. Core Inshorts vertical swiper feed */}
+              {/* 2. Core Card Deck Swiper (Next card underneath with scale & reveal) */}
               <CardSwiper
                 onOpenFullRoast={handleOpenFullRoast}
                 onOpenSourceLink={handleOpenSource}
               />
+
+              {/* 3. 5-Option Bottom Navigation Bar (Search, Notifications, Home, Settings, Saved) */}
+              <BottomNav
+                activeTab={activeTab}
+                onTabPress={handleTabPress}
+                bookmarkCount={bookmarks.length}
+                hasUnreadNotifications={false}
+              />
             </View>
 
-            {/* Modals & Bottom Sheets */}
+            {/* Modals & Overlays */}
+            <SearchModal
+              visible={isSearchOpen}
+              onClose={() => {
+                setIsSearchOpen(false);
+                setActiveTab('home');
+              }}
+            />
+
             <FullRoastModal
               visible={isRoastModalOpen}
               article={selectedRoastArticle}
@@ -93,17 +133,26 @@ export default function App() {
 
             <NotificationModal
               visible={isNotificationsOpen}
-              onClose={() => setIsNotificationsOpen(false)}
+              onClose={() => {
+                setIsNotificationsOpen(false);
+                setActiveTab('home');
+              }}
             />
 
             <SettingsModal
               visible={isSettingsOpen}
-              onClose={() => setIsSettingsOpen(false)}
+              onClose={() => {
+                setIsSettingsOpen(false);
+                setActiveTab('home');
+              }}
             />
 
             <BookmarksModal
               visible={isBookmarksOpen}
-              onClose={() => setIsBookmarksOpen(false)}
+              onClose={() => {
+                setIsBookmarksOpen(false);
+                setActiveTab('home');
+              }}
             />
           </SafeAreaView>
         </SafeAreaProvider>
@@ -121,5 +170,8 @@ const styles = StyleSheet.create({
   },
   appContainer: {
     flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
   },
 });

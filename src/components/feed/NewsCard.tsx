@@ -10,7 +10,6 @@ import { Article } from '../../types';
 import { formatRelativeTime } from '../../utils/date';
 import { shareArticle } from '../../utils/share';
 import { extractDomain, getReadingEstimate } from '../../utils/url';
-import { Badge } from '../common/Badge';
 import { IconButton } from '../common/IconButton';
 
 interface NewsCardProps {
@@ -58,8 +57,8 @@ export const NewsCard: React.FC<NewsCardProps> = ({
   const relativeTime = formatRelativeTime(article.published_at);
 
   const scrimColors = isDark
-    ? (['transparent', 'rgba(17, 20, 31, 0.45)', colors.card] as const)
-    : (['transparent', 'rgba(255, 255, 255, 0.5)', colors.card] as const);
+    ? (['transparent', 'rgba(17, 20, 31, 0.40)', colors.card] as const)
+    : (['transparent', 'rgba(255, 255, 255, 0.45)', colors.card] as const);
 
   return (
     <View style={[styles.pageWrapper, { height: cardHeight, backgroundColor: colors.background }]}>
@@ -91,17 +90,21 @@ export const NewsCard: React.FC<NewsCardProps> = ({
           />
           <LinearGradient
             colors={scrimColors}
-            locations={[0.4, 0.82, 1]}
+            locations={[0.42, 0.84, 1]}
             style={styles.gradientOverlay}
           />
 
-          {/* Floating Metadata Pill Row (Category chip + Reading Time + Relative Time) */}
+          {/* Floating Metadata Pill Row: ZERODAILY brand + Category domain chip */}
           <View style={styles.overlayRow}>
-            <Badge
-              label={categoryMeta.name}
-              color={categoryAccent}
-              size="sm"
-            />
+            <View style={[styles.brandBadge, { borderColor: `${categoryAccent}60` }]}>
+              <View style={[styles.brandDot, { backgroundColor: colors.primary }]} />
+              <Text style={styles.brandTitle}>ZERODAILY</Text>
+              <Text style={styles.brandDivider}>•</Text>
+              <Text style={[styles.categoryTitle, { color: categoryAccent }]}>
+                {categoryMeta.name.toUpperCase()}
+              </Text>
+            </View>
+
             <View style={styles.metaChip}>
               <Text style={styles.metaChipText}>{readingEstimate}</Text>
               <Text style={styles.metaChipDot}>•</Text>
@@ -110,21 +113,24 @@ export const NewsCard: React.FC<NewsCardProps> = ({
           </View>
         </View>
 
-        {/* 2. Editorial Headline & 60-Word Summary Body */}
+        {/* 2. Editorial Headline & Fully Extended Summary Body */}
         <View style={styles.bodyContainer}>
-          <Text
-            style={[styles.heading, { color: colors.textPrimary }]}
-            numberOfLines={3}
-          >
-            {article.heading}
-          </Text>
+          <View style={styles.headlineAndSummary}>
+            <Text
+              style={[styles.heading, { color: colors.textPrimary }]}
+              numberOfLines={3}
+            >
+              {article.heading}
+            </Text>
 
-          <Text
-            style={[styles.summary, { color: colors.textSecondary }]}
-            numberOfLines={6}
-          >
-            {article.shortSummary}
-          </Text>
+            <Text
+              style={[styles.summary, { color: colors.textSecondary }]}
+              numberOfLines={9}
+              ellipsizeMode="tail"
+            >
+              {article.shortSummary}
+            </Text>
+          </View>
 
           {/* Bespoke "Read Full Roast" Editorial Callout */}
           <TouchableOpacity
@@ -211,9 +217,9 @@ export const NewsCard: React.FC<NewsCardProps> = ({
 const styles = StyleSheet.create({
   pageWrapper: {
     width: '100%',
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingTop: 4,
-    paddingBottom: 8,
+    paddingBottom: 6,
   },
   card: {
     flex: 1,
@@ -226,7 +232,7 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     width: '100%',
-    height: '42%',
+    height: '47%',
     position: 'relative',
   },
   image: {
@@ -243,48 +249,82 @@ const styles = StyleSheet.create({
   overlayRow: {
     position: 'absolute',
     bottom: 10,
-    left: 14,
-    right: 14,
+    left: 12,
+    right: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  brandBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(9, 11, 17, 0.78)',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 9999,
+    borderWidth: 1,
+    gap: 5,
+  },
+  brandDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  brandTitle: {
+    color: '#FFFFFF',
+    fontSize: 10.5,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  brandDivider: {
+    color: '#64748B',
+    fontSize: 9,
+  },
+  categoryTitle: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
   metaChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(9, 11, 17, 0.72)',
+    backgroundColor: 'rgba(9, 11, 17, 0.75)',
     paddingHorizontal: 8,
-    paddingVertical: 3.5,
+    paddingVertical: 4,
     borderRadius: 9999,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.12)',
   },
   metaChipText: {
     color: '#CBD5E1',
-    fontSize: 10.5,
+    fontSize: 10,
     fontWeight: '600',
   },
   metaChipDot: {
     color: '#64748B',
-    fontSize: 10,
-    marginHorizontal: 4,
+    fontSize: 9,
+    marginHorizontal: 3,
   },
   bodyContainer: {
     flex: 1,
     paddingHorizontal: 16,
     paddingTop: 10,
-    justifyContent: 'flex-start',
+    paddingBottom: 8,
+    justifyContent: 'space-between',
+  },
+  headlineAndSummary: {
+    flex: 1,
   },
   heading: {
-    fontSize: 20,
+    fontSize: 19.5,
     fontWeight: '800',
-    lineHeight: 27,
+    lineHeight: 26,
     marginBottom: 8,
-    letterSpacing: -0.4,
+    letterSpacing: -0.35,
   },
   summary: {
-    fontSize: 14.5,
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 21.5,
     letterSpacing: 0.1,
   },
   fullRoastTrigger: {
@@ -296,7 +336,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 10,
-    marginTop: 12,
+    marginTop: 8,
   },
   roastLeft: {
     flexDirection: 'row',

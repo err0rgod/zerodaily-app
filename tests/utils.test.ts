@@ -72,3 +72,46 @@ describe('Dynamic Category Image Fallback System', () => {
   });
 });
 
+describe('Search Utility', () => {
+  const sampleArticles = [
+    {
+      id: '1',
+      category: 'cybersec' as const,
+      heading: 'CrowdStrike Meltdown in Windows Drivers',
+      shortSummary: 'Blue screens across the airport departure boards.',
+      fullSummary: 'Detailed breakdown',
+      published_at: new Date().toISOString(),
+      link: 'https://example.com/1',
+      image_url: 'https://example.com/1.png',
+    },
+    {
+      id: '2',
+      category: 'ai' as const,
+      heading: 'Anthropic Launches Claude 3.7 Thinking',
+      shortSummary: 'Hybrid reasoning models struggle with centering a CSS div.',
+      fullSummary: 'Detailed breakdown',
+      published_at: new Date().toISOString(),
+      link: 'https://example.com/2',
+      image_url: 'https://example.com/2.png',
+    },
+  ];
+
+  test('filters by keyword across heading and shortSummary', () => {
+    const { searchArticles } = require('../src/utils/search');
+    const res1 = searchArticles(sampleArticles, 'CrowdStrike');
+    expect(res1.length).toBe(1);
+    expect(res1[0].id).toBe('1');
+
+    const res2 = searchArticles(sampleArticles, 'centering');
+    expect(res2.length).toBe(1);
+    expect(res2[0].id).toBe('2');
+  });
+
+  test('filters by category taxonomy', () => {
+    const { searchArticles } = require('../src/utils/search');
+    const res = searchArticles(sampleArticles, '', 'ai');
+    expect(res.length).toBe(1);
+    expect(res[0].category).toBe('ai');
+  });
+});
+
