@@ -1,14 +1,15 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Bookmark, ExternalLink, Flame, Share2 } from 'lucide-react-native';
+import { Bookmark, ChevronRight, ExternalLink, Flame, Globe, Share2 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { CATEGORIES, DEFAULT_FALLBACK_IMAGE } from '../../constants/categories';
-import { THEME } from '../../constants/theme';
+import { CATEGORIES, DEFAULT_FALLBACK_IMAGE, getDynamicFallbackImage } from '../../constants/categories';
 import { useBookmarkStore } from '../../store/bookmarkStore';
+import { useTheme } from '../../store/themeStore';
 import { Article } from '../../types';
 import { formatRelativeTime } from '../../utils/date';
 import { shareArticle } from '../../utils/share';
+import { extractDomain, getReadingEstimate } from '../../utils/url';
 import { Badge } from '../common/Badge';
 import { IconButton } from '../common/IconButton';
 
@@ -25,19 +26,24 @@ export const NewsCard: React.FC<NewsCardProps> = ({
   onOpenFullRoast,
   onOpenSourceLink,
 }) => {
+  const { colors, isDark } = useTheme();
   const { isBookmarked, toggleBookmark } = useBookmarkStore();
   const bookmarked = isBookmarked(article.id);
-  const categoryMeta = CATEGORIES[article.category] || CATEGORIES.all;
-  const fallbackImage = categoryMeta.fallbackImage || DEFAULT_FALLBACK_IMAGE;
 
-  // Track active image with graceful fallback on 404 / load error
+  const categoryMeta = CATEGORIES[article.category] || CATEGORIES.all;
+  const dynamicFallback = getDynamicFallbackImage(article.id, article.category);
+  const categoryAccent = article.category === 'all'
+    ? colors.primary
+    : (colors[article.category] || categoryMeta.accentColor);
+
+  // Track active image with graceful dynamic category fallback on 404 / load error
   const isValidUrl = Boolean(article.image_url && article.image_url.trim().length > 0);
-  const [imageUri, setImageUri] = useState<string>(isValidUrl ? article.image_url : fallbackImage);
+  const [imageUri, setImageUri] = useState<string>(isValidUrl ? article.image_url : dynamicFallback);
 
   useEffect(() => {
     const valid = Boolean(article.image_url && article.image_url.trim().length > 0);
-    setImageUri(valid ? article.image_url : fallbackImage);
-  }, [article.image_url, fallbackImage]);
+    setImageUri(valid ? article.image_url : dynamicFallback);
+  }, [article.image_url, dynamicFallback]);
 
   const handleToggleBookmark = async () => {
     await toggleBookmark(article);
@@ -47,11 +53,30 @@ export const NewsCard: React.FC<NewsCardProps> = ({
     shareArticle(article);
   };
 
+  const domain = extractDomain(article.link);
+  const readingEstimate = getReadingEstimate(article.shortSummary);
+  const relativeTime = formatRelativeTime(article.published_at);
+
+  const scrimColors = isDark
+    ? (['transparent', 'rgba(17, 20, 31, 0.45)', colors.card] as const)
+    : (['transparent', 'rgba(255, 255, 255, 0.5)', colors.card] as const);
+
   return (
-    <View style={[styles.pageWrapper, { height: cardHeight }]}>
-      <View style={styles.card}>
-        {/* 1. Hero Image with WebP Cache, Automatic Fallback & Gradient Overlay */}
-        <View style={styles.imageContainer}>
+    <View style={[styles.pageWrapper, { height: cardHeight, backgroundColor: colors.background }]}>
+      <View
+        style={[
+          styles.card,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.cardBorder,
+            shadowColor: isDark ? '#000000' : '#0F172A',
+            shadowOpacity: isDark ? 0.35 : 0.08,
+            elevation: isDark ? 2 : 4,
+          },
+        ]}
+      >
+        {/* 1. Hero Image with WebP Cache, Error Fallback & Adaptive Gradient Scrim */}
+        <View style={[styles.imageContainer, { backgroundColor: isDark ? '#161B28' : '#E2E8F0' }]}>
           <Image
             source={{ uri: imageUri }}
             style={styles.image}
@@ -59,80 +84,121 @@ export const NewsCard: React.FC<NewsCardProps> = ({
             transition={250}
             cachePolicy="memory-disk"
             onError={() => {
-              if (imageUri !== fallbackImage) {
-                setImageUri(fallbackImage);
+              if (imageUri !== dynamicFallback) {
+                setImageUri(dynamicFallback);
               }
             }}
           />
           <LinearGradient
-            colors={['transparent', 'rgba(15, 23, 42, 0.65)', '#0F172A']}
-            locations={[0.45, 0.85, 1]}
+            colors={scrimColors}
+            locations={[0.4, 0.82, 1]}
             style={styles.gradientOverlay}
           />
 
-          {/* Category Badge & Timestamp Badge Overlay */}
+          {/* Floating Metadata Pill Row (Category chip + Reading Time + Relative Time) */}
           <View style={styles.overlayRow}>
             <Badge
               label={categoryMeta.name}
-              color={categoryMeta.accentColor}
+              color={categoryAccent}
               size="sm"
             />
-            <Text style={styles.timestampText}>{formatRelativeTime(article.published_at)}</Text>
+            <View style={styles.metaChip}>
+              <Text style={styles.metaChipText}>{readingEstimate}</Text>
+              <Text style={styles.metaChipDot}>•</Text>
+              <Text style={styles.metaChipText}>{relativeTime}</Text>
+            </View>
           </View>
         </View>
 
-        {/* 2. Headline & 60-Word Summary Body */}
+        {/* 2. Editorial Headline & 60-Word Summary Body */}
         <View style={styles.bodyContainer}>
-          <Text style={styles.heading} numberOfLines={3}>
+          <Text
+            style={[styles.heading, { color: colors.textPrimary }]}
+            numberOfLines={3}
+          >
             {article.heading}
           </Text>
 
-          <Text style={styles.summary} numberOfLines={6}>
+          <Text
+            style={[styles.summary, { color: colors.textSecondary }]}
+            numberOfLines={6}
+          >
             {article.shortSummary}
           </Text>
 
-          {/* Read Full Roast Pill Trigger */}
+          {/* Bespoke "Read Full Roast" Editorial Callout */}
           <TouchableOpacity
-            activeOpacity={0.7}
+            activeOpacity={0.75}
             onPress={() => onOpenFullRoast(article)}
-            style={styles.fullRoastTrigger}
+            style={[
+              styles.fullRoastTrigger,
+              {
+                backgroundColor: colors.warningSoft,
+                borderColor: isDark ? 'rgba(245, 158, 11, 0.28)' : 'rgba(217, 119, 6, 0.25)',
+              },
+            ]}
           >
-            <Flame size={15} color={THEME.colors.warning} />
-            <Text style={styles.fullRoastText}>Read Full Satirical Roast</Text>
+            <View style={styles.roastLeft}>
+              <Flame size={15} color={colors.warning} />
+              <Text style={[styles.fullRoastText, { color: colors.warning }]}>
+                Full Satirical Roast
+              </Text>
+            </View>
+            <ChevronRight size={14} color={colors.warning} />
           </TouchableOpacity>
         </View>
 
-        {/* 3. Footer Actions (Source link, Bookmark, Share) */}
-        <View style={styles.footerContainer}>
+        {/* 3. Refined Footer Actions Bar */}
+        <View
+          style={[
+            styles.footerContainer,
+            {
+              borderTopColor: colors.border,
+              backgroundColor: isDark ? 'rgba(0, 0, 0, 0.25)' : '#F8FAFC',
+            },
+          ]}
+        >
+          {/* Authentic Publisher Domain Tag */}
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => onOpenSourceLink(article.link)}
-            style={styles.sourceButton}
+            style={[
+              styles.sourceButton,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              },
+            ]}
           >
-            <Text style={styles.sourceButtonText} numberOfLines={1}>
-              Source / Original
+            <Globe size={13} color={colors.textMuted} />
+            <Text
+              style={[styles.sourceButtonText, { color: colors.textSecondary }]}
+              numberOfLines={1}
+            >
+              {domain}
             </Text>
-            <ExternalLink size={14} color={THEME.colors.textSecondary} />
+            <ExternalLink size={12} color={colors.textMuted} />
           </TouchableOpacity>
 
+          {/* Bookmark & Share Actions */}
           <View style={styles.actionButtonsRow}>
             <IconButton
               icon={
                 <Bookmark
-                  size={18}
-                  color={bookmarked ? THEME.colors.primary : THEME.colors.textPrimary}
-                  fill={bookmarked ? THEME.colors.primary : 'transparent'}
+                  size={17}
+                  color={bookmarked ? colors.primary : colors.textPrimary}
+                  fill={bookmarked ? colors.primary : 'transparent'}
                 />
               }
               onPress={handleToggleBookmark}
-              size={38}
+              size={36}
               active={bookmarked}
               style={styles.actionBtn}
             />
             <IconButton
-              icon={<Share2 size={18} color={THEME.colors.textPrimary} />}
+              icon={<Share2 size={17} color={colors.textPrimary} />}
               onPress={handleShare}
-              size={38}
+              size={36}
               style={styles.actionBtn}
             />
           </View>
@@ -145,30 +211,23 @@ export const NewsCard: React.FC<NewsCardProps> = ({
 const styles = StyleSheet.create({
   pageWrapper: {
     width: '100%',
-    backgroundColor: THEME.colors.background,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingTop: 4,
     paddingBottom: 8,
   },
   card: {
     flex: 1,
-    backgroundColor: THEME.colors.card,
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: THEME.colors.cardBorder,
     overflow: 'hidden',
     justifyContent: 'space-between',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 8,
   },
   imageContainer: {
     width: '100%',
     height: '42%',
     position: 'relative',
-    backgroundColor: '#1E293B',
   },
   image: {
     width: '100%',
@@ -183,93 +242,98 @@ const styles = StyleSheet.create({
   },
   overlayRow: {
     position: 'absolute',
-    bottom: 12,
-    left: THEME.spacing.md,
-    right: THEME.spacing.md,
+    bottom: 10,
+    left: 14,
+    right: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  timestampText: {
-    color: THEME.colors.textMuted,
-    fontSize: THEME.typography.sizes.xs,
-    fontWeight: '600',
-    backgroundColor: 'rgba(9, 13, 22, 0.75)',
+  metaChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(9, 11, 17, 0.72)',
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingVertical: 3.5,
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  metaChipText: {
+    color: '#CBD5E1',
+    fontSize: 10.5,
+    fontWeight: '600',
+  },
+  metaChipDot: {
+    color: '#64748B',
+    fontSize: 10,
+    marginHorizontal: 4,
   },
   bodyContainer: {
     flex: 1,
-    paddingHorizontal: THEME.spacing.md,
+    paddingHorizontal: 16,
     paddingTop: 10,
     justifyContent: 'flex-start',
   },
   heading: {
-    fontSize: THEME.typography.sizes.xl,
+    fontSize: 20,
     fontWeight: '800',
-    color: THEME.colors.textPrimary,
-    lineHeight: 28,
+    lineHeight: 27,
     marginBottom: 8,
-    letterSpacing: -0.3,
+    letterSpacing: -0.4,
   },
   summary: {
-    fontSize: THEME.typography.sizes.base,
-    color: THEME.colors.textSecondary,
+    fontSize: 14.5,
     lineHeight: 22,
     letterSpacing: 0.1,
   },
   fullRoastTrigger: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    justifyContent: 'space-between',
+    alignSelf: 'stretch',
     borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.3)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: THEME.radii.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
     marginTop: 12,
-    gap: 6,
+  },
+  roastLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
   },
   fullRoastText: {
-    color: THEME.colors.warning,
-    fontSize: THEME.typography.sizes.xs,
+    fontSize: 12,
     fontWeight: '700',
+    letterSpacing: 0.2,
   },
   footerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: THEME.spacing.md,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
     borderTopWidth: 1,
-    borderTopColor: THEME.colors.border,
-    backgroundColor: THEME.colors.card,
   },
   sourceButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: THEME.colors.surface,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: THEME.radii.md,
+    paddingHorizontal: 11,
+    paddingVertical: 6.5,
+    borderRadius: 9999,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
-    gap: 6,
-    maxWidth: '60%',
+    gap: 5,
+    maxWidth: '65%',
   },
   sourceButtonText: {
-    color: THEME.colors.textSecondary,
-    fontSize: THEME.typography.sizes.xs,
+    fontSize: 12,
     fontWeight: '600',
   },
   actionButtonsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
-  actionBtn: {
-    backgroundColor: THEME.colors.surface,
-  },
+  actionBtn: {},
 });

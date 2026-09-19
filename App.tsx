@@ -12,15 +12,19 @@ import { FullRoastModal } from './src/components/modals/FullRoastModal';
 import { NotificationModal } from './src/components/modals/NotificationModal';
 import { SettingsModal } from './src/components/modals/SettingsModal';
 import { openArticleSource } from './src/components/webview/ArticleReader';
-import { THEME } from './src/constants/theme';
 import { useNotifications } from './src/hooks/useNotifications';
 import { useBookmarkStore } from './src/store/bookmarkStore';
 import { useFeedStore } from './src/store/feedStore';
+import { useTheme, useThemeStore } from './src/store/themeStore';
 import { Article, CategoryKey } from './src/types';
 
 export default function App() {
   // Push notification channel & topic initialization
   useNotifications();
+
+  // Active theme
+  const { colors, isDark } = useTheme();
+  const initTheme = useThemeStore((s) => s.initTheme);
 
   // Store access
   const { category, setCategory } = useFeedStore();
@@ -34,8 +38,9 @@ export default function App() {
   const [isBookmarksOpen, setIsBookmarksOpen] = useState<boolean>(false);
 
   useEffect(() => {
+    initTheme();
     loadBookmarks();
-  }, [loadBookmarks]);
+  }, [initTheme, loadBookmarks]);
 
   const handleOpenFullRoast = (article: Article) => {
     setSelectedRoastArticle(article);
@@ -52,13 +57,13 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <GestureHandlerRootView style={styles.root}>
+      <GestureHandlerRootView style={[styles.root, { backgroundColor: colors.background }]}>
         <SafeAreaProvider>
-          <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
-            <StatusBar style="light" backgroundColor={THEME.colors.background} />
+          <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'left', 'right', 'bottom']}>
+            <StatusBar style={isDark ? 'light' : 'dark'} backgroundColor={colors.background} />
 
-            <View style={styles.appContainer}>
-              {/* 1. Header with brand, bell, bookmarks, settings */}
+            <View style={[styles.appContainer, { backgroundColor: colors.background }]}>
+              {/* 1. Header with brand, theme toggle, bell, bookmarks, settings */}
               <Header
                 onOpenNotifications={() => setIsNotificationsOpen(true)}
                 onOpenBookmarks={() => setIsBookmarksOpen(true)}
@@ -110,14 +115,11 @@ export default function App() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
   },
   safeArea: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
   },
   appContainer: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
   },
 });

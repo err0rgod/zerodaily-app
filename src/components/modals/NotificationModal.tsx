@@ -12,9 +12,9 @@ import {
   View,
 } from 'react-native';
 import { fetchArticleById, fetchNotificationHistory } from '../../api/client';
-import { CATEGORIES } from '../../constants/categories';
-import { THEME } from '../../constants/theme';
+import { CATEGORIES, getDynamicFallbackImage } from '../../constants/categories';
 import { useFeedStore } from '../../store/feedStore';
+import { useTheme } from '../../store/themeStore';
 import { NotificationItem } from '../../types';
 import { formatRelativeTime } from '../../utils/date';
 import { Badge } from '../common/Badge';
@@ -28,6 +28,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
   visible,
   onClose,
 }) => {
+  const { colors } = useTheme();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const { setArticleDirectly } = useFeedStore();
@@ -52,16 +53,19 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
 
   const renderItem = ({ item }: { item: NotificationItem }) => {
     const categoryMeta = CATEGORIES[item.category] || CATEGORIES.all;
+    const fallback = getDynamicFallbackImage(item.article_id, item.category);
+    const imageUri = (item.image_url && item.image_url.trim().length > 0) ? item.image_url : fallback;
+    const catColor = colors[item.category] || categoryMeta.accentColor;
 
     return (
       <TouchableOpacity
         activeOpacity={0.7}
         onPress={() => handleSelectNotification(item)}
-        style={styles.itemContainer}
+        style={[styles.itemContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}
       >
         <Image
-          source={{ uri: item.image_url }}
-          style={styles.thumbnail}
+          source={{ uri: imageUri }}
+          style={[styles.thumbnail, { backgroundColor: colors.cardBorder }]}
           contentFit="cover"
           transition={200}
         />
@@ -69,15 +73,15 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
           <View style={styles.itemMeta}>
             <Badge
               label={categoryMeta.name}
-              color={categoryMeta.accentColor}
+              color={catColor}
               size="sm"
             />
-            <Text style={styles.timeText}>{formatRelativeTime(item.published_at)}</Text>
+            <Text style={[styles.timeText, { color: colors.textMuted }]}>{formatRelativeTime(item.published_at)}</Text>
           </View>
-          <Text style={styles.heading} numberOfLines={2}>
+          <Text style={[styles.heading, { color: colors.textPrimary }]} numberOfLines={2}>
             {item.heading}
           </Text>
-          <Text style={styles.punchline} numberOfLines={1}>
+          <Text style={[styles.punchline, { color: colors.primary }]} numberOfLines={1}>
             {item.push_punchline}
           </Text>
         </View>
@@ -92,22 +96,22 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.container}>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
           {/* Header */}
-          <View style={styles.header}>
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <View style={styles.titleRow}>
-              <Bell size={20} color={THEME.colors.primary} />
-              <Text style={styles.modalTitle}>Breaking Alerts Inbox</Text>
+              <Bell size={20} color={colors.primary} />
+              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Breaking Alerts Inbox</Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <X size={20} color={THEME.colors.textPrimary} />
+            <TouchableOpacity onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.surface }]}>
+              <X size={20} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
 
           {loading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={THEME.colors.primary} />
+              <ActivityIndicator size="large" color={colors.primary} />
             </View>
           ) : (
             <FlatList
@@ -118,7 +122,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
               showsVerticalScrollIndicator={false}
               ListEmptyComponent={
                 <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>No recent breaking alerts.</Text>
+                  <Text style={[styles.emptyText, { color: colors.textMuted }]}>No recent breaking alerts.</Text>
                 </View>
               }
             />
@@ -132,20 +136,17 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
   },
   container: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: THEME.spacing.md,
+    paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: THEME.colors.border,
   },
   titleRow: {
     flexDirection: 'row',
@@ -153,14 +154,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   modalTitle: {
-    fontSize: THEME.typography.sizes.lg,
+    fontSize: 18,
     fontWeight: '700',
-    color: THEME.colors.textPrimary,
   },
   closeBtn: {
     padding: 6,
-    borderRadius: THEME.radii.full,
-    backgroundColor: THEME.colors.surface,
+    borderRadius: 9999,
   },
   loadingContainer: {
     flex: 1,
@@ -168,22 +167,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   listContent: {
-    padding: THEME.spacing.md,
+    padding: 16,
   },
   itemContainer: {
     flexDirection: 'row',
     padding: 12,
-    borderRadius: THEME.radii.md,
-    backgroundColor: THEME.colors.surface,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   thumbnail: {
     width: 64,
     height: 64,
-    borderRadius: THEME.radii.sm,
-    backgroundColor: THEME.colors.card,
+    borderRadius: 8,
   },
   itemContent: {
     flex: 1,
@@ -198,18 +194,15 @@ const styles = StyleSheet.create({
   },
   timeText: {
     fontSize: 10,
-    color: THEME.colors.textMuted,
     fontWeight: '500',
   },
   heading: {
-    fontSize: THEME.typography.sizes.sm,
+    fontSize: 13,
     fontWeight: '700',
-    color: THEME.colors.textPrimary,
     lineHeight: 18,
   },
   punchline: {
-    fontSize: THEME.typography.sizes.xs,
-    color: THEME.colors.primary,
+    fontSize: 11.5,
     fontWeight: '600',
     marginTop: 2,
   },
@@ -218,7 +211,6 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
   },
   emptyText: {
-    color: THEME.colors.textMuted,
-    fontSize: THEME.typography.sizes.sm,
+    fontSize: 13,
   },
 });

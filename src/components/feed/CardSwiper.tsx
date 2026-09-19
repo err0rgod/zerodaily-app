@@ -10,9 +10,9 @@ import {
   View,
   ViewToken,
 } from 'react-native';
-import { CATEGORIES } from '../../constants/categories';
-import { THEME } from '../../constants/theme';
+import { CATEGORIES, getDynamicFallbackImage } from '../../constants/categories';
 import { useFeedStore } from '../../store/feedStore';
+import { useTheme } from '../../store/themeStore';
 import { Article } from '../../types';
 import { NewsCard } from './NewsCard';
 
@@ -35,6 +35,8 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     loadInitialFeed,
   } = useFeedStore();
 
+  const { colors } = useTheme();
+
   const [containerHeight, setContainerHeight] = useState<number>(0);
   const flatListRef = useRef<FlatList<Article>>(null);
 
@@ -43,16 +45,19 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     loadInitialFeed();
   }, [loadInitialFeed]);
 
-  // Warm-up disk & memory image cache for all category fallback images on mount
+  // Warm-up disk & memory image cache for category fallback image pools on mount
   useEffect(() => {
     Object.values(CATEGORIES).forEach((cat) => {
-      if (cat.fallbackImage) {
-        Image.prefetch(cat.fallbackImage).catch(() => {});
-      }
+      const pool = cat.fallbackImages || [cat.fallbackImage];
+      pool.forEach((img) => {
+        if (img) {
+          Image.prefetch(img).catch(() => {});
+        }
+      });
     });
   }, []);
 
-  // Image prefetching for upcoming 3 cards (with category fallback support)
+  // Image prefetching for upcoming 3 cards (with dynamic category fallback support)
   useEffect(() => {
     if (articles.length > 0) {
       const nextBatch = articles.slice(currentIndex + 1, currentIndex + 4);
@@ -60,7 +65,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
         const url =
           (article.image_url && article.image_url.trim().length > 0)
             ? article.image_url
-            : CATEGORIES[article.category]?.fallbackImage;
+            : getDynamicFallbackImage(article.id, article.category);
         if (url) {
           Image.prefetch(url).catch(() => {});
         }
@@ -122,15 +127,17 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
 
   if (articles.length === 0) {
     return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyTitle}>No Stories Available</Text>
-        <Text style={styles.emptySub}>Pull down to check for breaking tech feeds.</Text>
+      <View style={[styles.emptyContainer, { backgroundColor: colors.background }]}>
+        <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No Stories Available</Text>
+        <Text style={[styles.emptySub, { color: colors.textSecondary }]}>
+          Pull down to check for breaking tech feeds.
+        </Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container} onLayout={handleLayout}>
+    <View style={[styles.container, { backgroundColor: colors.background }]} onLayout={handleLayout}>
       {containerHeight > 0 && (
         <FlatList
           ref={flatListRef}
@@ -150,8 +157,8 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={refreshFeed}
-              tintColor={THEME.colors.primary}
-              colors={[THEME.colors.primary]}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
             />
           }
           windowSize={5}
@@ -167,24 +174,20 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
   },
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: THEME.colors.background,
-    padding: THEME.spacing.lg,
+    padding: 24,
   },
   emptyTitle: {
-    fontSize: THEME.typography.sizes.lg,
+    fontSize: 18,
     fontWeight: '700',
-    color: THEME.colors.textPrimary,
     marginBottom: 6,
   },
   emptySub: {
-    fontSize: THEME.typography.sizes.sm,
-    color: THEME.colors.textSecondary,
+    fontSize: 13,
     textAlign: 'center',
   },
 });

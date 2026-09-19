@@ -11,6 +11,11 @@ on:
         options:
           - release
           - debug
+      release_tag:
+        description: 'Release Tag (e.g. v0.1.3)'
+        required: false
+        default: 'v0.1.3'
+        type: string
   push:
     tags:
       - 'v*'
@@ -32,6 +37,8 @@ jobs:
     steps:
       - name: ⬇️ Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: 🟢 Setup Node.js 22 (LTS)
         uses: actions/setup-node@v4
@@ -79,8 +86,8 @@ jobs:
         working-directory: android
         run: ./gradlew assembleDebug -PkotlinVersion=1.9.25 --no-daemon --stacktrace
 
-      - name: 📦 Prepare Direct APK File
-        id: find_apk
+      - name: 📦 Prepare Direct APK File, Checksums & Source Archives
+        id: prepare_assets
         run: |
           RAW_APK=$(find android/app/build/outputs/apk -name "*.apk" | head -n 1)
           if [ -z "$RAW_APK" ]; then
@@ -90,19 +97,43 @@ jobs:
           echo "Found raw APK at: $RAW_APK"
           mkdir -p build_output
           cp "$RAW_APK" build_output/ZeroDaily.apk
-          echo "apk_path=build_output/ZeroDaily.apk" >> $GITHUB_OUTPUT
 
-      - name: 🏷️ Publish Direct Download Release (No Zip)
+          TAG_NAME="${{ github.ref_name || inputs.release_tag || 'v0.1.3' }}"
+
+          # 1. Generate SHA256 Checksums (.txt)
+          cd build_output
+          sha256sum ZeroDaily.apk > ZeroDaily-SHA256.txt
+          echo "Commit SHA: ${{ github.sha }}" >> ZeroDaily-SHA256.txt
+          echo "Release Tag: $TAG_NAME" >> ZeroDaily-SHA256.txt
+          echo "Build Timestamp UTC: $(date -u)" >> ZeroDaily-SHA256.txt
+          cat ZeroDaily-SHA256.txt
+          cd ..
+
+          # 2. Package Clean Source Code Archives (.zip and .tar.gz)
+          git archive --format=zip --output=build_output/source-code.zip HEAD
+          git archive --format=tar.gz --output=build_output/source-code.tar.gz HEAD
+
+      - name: 🏷️ Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: "ZeroDaily Mobile App (Latest Standalone APK)"
+          tag_name: ${{ github.ref_name || inputs.release_tag || 'v0.1.3' }}
+          name: "ZeroDaily Mobile Release ${{ github.ref_name || inputs.release_tag || 'v0.1.3' }}"
           body: |
-            ### 📱 ZeroDaily Mobile Release
+            ### 📱 ZeroDaily Mobile Release ${{ github.ref_name || inputs.release_tag || 'v0.1.3' }}
             - **Standalone Release Build**: Full offline JS bundle embedded (no Metro dev server required).
             - **Backend API**: Configured directly to `https://api.zerodaily.in`.
-            - **Direct Download**: Tap `ZeroDaily.apk` below to download directly without unzipping.
-          files: build_output/ZeroDaily.apk
+            - **Commit SHA**: `${{ github.sha }}`
+
+            #### 📦 Release Assets Included:
+            - `ZeroDaily.apk` — Standalone Android Release APK
+            - `ZeroDaily-SHA256.txt` — SHA256 Checksum and Git Commit verification
+            - `source-code.zip` — Source code archive (.zip)
+            - `source-code.tar.gz` — Source code archive (.tar.gz)
+          files: |
+            build_output/ZeroDaily.apk
+            build_output/ZeroDaily-SHA256.txt
+            build_output/source-code.zip
+            build_output/source-code.tar.gz
           draft: false
           prerelease: false
         env:

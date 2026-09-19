@@ -10,10 +10,10 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { CATEGORIES } from '../../constants/categories';
-import { THEME } from '../../constants/theme';
+import { CATEGORIES, getDynamicFallbackImage } from '../../constants/categories';
 import { useBookmarkStore } from '../../store/bookmarkStore';
 import { useFeedStore } from '../../store/feedStore';
+import { useTheme } from '../../store/themeStore';
 import { Article } from '../../types';
 import { formatRelativeTime } from '../../utils/date';
 import { Badge } from '../common/Badge';
@@ -24,6 +24,7 @@ interface BookmarksModalProps {
 }
 
 export const BookmarksModal: React.FC<BookmarksModalProps> = ({ visible, onClose }) => {
+  const { colors } = useTheme();
   const { bookmarks, loadBookmarks, toggleBookmark, clearAllBookmarks } = useBookmarkStore();
   const { setArticleDirectly } = useFeedStore();
 
@@ -40,17 +41,20 @@ export const BookmarksModal: React.FC<BookmarksModalProps> = ({ visible, onClose
 
   const renderItem = ({ item }: { item: Article }) => {
     const categoryMeta = CATEGORIES[item.category] || CATEGORIES.all;
+    const fallback = getDynamicFallbackImage(item.id, item.category);
+    const imageUri = (item.image_url && item.image_url.trim().length > 0) ? item.image_url : fallback;
+    const catColor = colors[item.category] || categoryMeta.accentColor;
 
     return (
-      <View style={styles.itemContainer}>
+      <View style={[styles.itemContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <TouchableOpacity
           activeOpacity={0.7}
           onPress={() => handleSelectArticle(item)}
           style={styles.clickableRow}
         >
           <Image
-            source={{ uri: item.image_url }}
-            style={styles.thumbnail}
+            source={{ uri: imageUri }}
+            style={[styles.thumbnail, { backgroundColor: colors.cardBorder }]}
             contentFit="cover"
             transition={200}
           />
@@ -58,12 +62,12 @@ export const BookmarksModal: React.FC<BookmarksModalProps> = ({ visible, onClose
             <View style={styles.itemMeta}>
               <Badge
                 label={categoryMeta.name}
-                color={categoryMeta.accentColor}
+                color={catColor}
                 size="sm"
               />
-              <Text style={styles.timeText}>{formatRelativeTime(item.published_at)}</Text>
+              <Text style={[styles.timeText, { color: colors.textMuted }]}>{formatRelativeTime(item.published_at)}</Text>
             </View>
-            <Text style={styles.heading} numberOfLines={2}>
+            <Text style={[styles.heading, { color: colors.textPrimary }]} numberOfLines={2}>
               {item.heading}
             </Text>
           </View>
@@ -73,7 +77,7 @@ export const BookmarksModal: React.FC<BookmarksModalProps> = ({ visible, onClose
           onPress={() => toggleBookmark(item)}
           style={styles.removeBtn}
         >
-          <Trash2 size={16} color={THEME.colors.textMuted} />
+          <Trash2 size={16} color={colors.textMuted} />
         </TouchableOpacity>
       </View>
     );
@@ -86,22 +90,25 @@ export const BookmarksModal: React.FC<BookmarksModalProps> = ({ visible, onClose
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.container}>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
           {/* Header */}
-          <View style={styles.header}>
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <View style={styles.titleRow}>
-              <Bookmark size={20} color={THEME.colors.primary} />
-              <Text style={styles.modalTitle}>Saved Offline Stories</Text>
+              <Bookmark size={20} color={colors.primary} />
+              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Saved Offline Stories</Text>
             </View>
             <View style={styles.actionsRow}>
               {bookmarks.length > 0 && (
-                <TouchableOpacity onPress={clearAllBookmarks} style={styles.clearBtn}>
-                  <Text style={styles.clearBtnText}>Clear All</Text>
+                <TouchableOpacity
+                  onPress={clearAllBookmarks}
+                  style={[styles.clearBtn, { backgroundColor: `${colors.danger}18` }]}
+                >
+                  <Text style={[styles.clearBtnText, { color: colors.danger }]}>Clear All</Text>
                 </TouchableOpacity>
               )}
-              <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                <X size={20} color={THEME.colors.textPrimary} />
+              <TouchableOpacity onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.surface }]}>
+                <X size={20} color={colors.textPrimary} />
               </TouchableOpacity>
             </View>
           </View>
@@ -114,9 +121,9 @@ export const BookmarksModal: React.FC<BookmarksModalProps> = ({ visible, onClose
             showsVerticalScrollIndicator={false}
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
-                <Bookmark size={40} color={THEME.colors.borderLight} style={{ marginBottom: 12 }} />
-                <Text style={styles.emptyTitle}>No Bookmarks Saved</Text>
-                <Text style={styles.emptySub}>
+                <Bookmark size={40} color={colors.border} style={{ marginBottom: 12 }} />
+                <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No Bookmarks Saved</Text>
+                <Text style={[styles.emptySub, { color: colors.textMuted }]}>
                   Bookmark stories in the feed to read them offline at any time.
                 </Text>
               </View>
@@ -131,20 +138,17 @@ export const BookmarksModal: React.FC<BookmarksModalProps> = ({ visible, onClose
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
   },
   container: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: THEME.spacing.md,
+    paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: THEME.colors.border,
   },
   titleRow: {
     flexDirection: 'row',
@@ -152,9 +156,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   modalTitle: {
-    fontSize: THEME.typography.sizes.lg,
+    fontSize: 18,
     fontWeight: '700',
-    color: THEME.colors.textPrimary,
   },
   actionsRow: {
     flexDirection: 'row',
@@ -164,31 +167,26 @@ const styles = StyleSheet.create({
   clearBtn: {
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: THEME.radii.sm,
-    backgroundColor: `${THEME.colors.danger}20`,
+    borderRadius: 8,
   },
   clearBtnText: {
-    color: THEME.colors.danger,
-    fontSize: THEME.typography.sizes.xs,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
   },
   closeBtn: {
     padding: 6,
-    borderRadius: THEME.radii.full,
-    backgroundColor: THEME.colors.surface,
+    borderRadius: 9999,
   },
   listContent: {
-    padding: THEME.spacing.md,
+    padding: 16,
   },
   itemContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
-    borderRadius: THEME.radii.md,
-    backgroundColor: THEME.colors.surface,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   clickableRow: {
     flex: 1,
@@ -198,8 +196,7 @@ const styles = StyleSheet.create({
   thumbnail: {
     width: 60,
     height: 60,
-    borderRadius: THEME.radii.sm,
-    backgroundColor: THEME.colors.card,
+    borderRadius: 8,
   },
   itemContent: {
     flex: 1,
@@ -214,13 +211,11 @@ const styles = StyleSheet.create({
   },
   timeText: {
     fontSize: 10,
-    color: THEME.colors.textMuted,
     fontWeight: '500',
   },
   heading: {
-    fontSize: THEME.typography.sizes.sm,
+    fontSize: 13,
     fontWeight: '700',
-    color: THEME.colors.textPrimary,
     lineHeight: 18,
   },
   removeBtn: {
@@ -230,17 +225,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 60,
-    paddingHorizontal: THEME.spacing.lg,
+    paddingHorizontal: 24,
   },
   emptyTitle: {
-    fontSize: THEME.typography.sizes.base,
+    fontSize: 16,
     fontWeight: '700',
-    color: THEME.colors.textPrimary,
     marginBottom: 6,
   },
   emptySub: {
-    fontSize: THEME.typography.sizes.sm,
-    color: THEME.colors.textMuted,
+    fontSize: 13,
     textAlign: 'center',
   },
 });

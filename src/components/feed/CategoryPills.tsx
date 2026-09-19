@@ -1,7 +1,7 @@
 import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { CATEGORY_LIST } from '../../constants/categories';
-import { THEME } from '../../constants/theme';
+import { useTheme } from '../../store/themeStore';
 import { CategoryKey } from '../../types';
 
 interface CategoryPillsProps {
@@ -13,8 +13,10 @@ export const CategoryPills: React.FC<CategoryPillsProps> = ({
   activeCategory,
   onSelectCategory,
 }) => {
+  const { colors, isDark } = useTheme();
+
   return (
-    <View style={styles.wrapper}>
+    <View style={[styles.wrapper, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -22,6 +24,8 @@ export const CategoryPills: React.FC<CategoryPillsProps> = ({
       >
         {CATEGORY_LIST.map((item) => {
           const isActive = activeCategory === item.key;
+          const accent = item.key === 'all' ? colors.primary : (colors[item.key] || item.accentColor);
+
           return (
             <TouchableOpacity
               key={item.key}
@@ -29,24 +33,24 @@ export const CategoryPills: React.FC<CategoryPillsProps> = ({
               onPress={() => onSelectCategory(item.key)}
               style={[
                 styles.pill,
-                isActive && {
-                  backgroundColor: `${item.accentColor}20`,
-                  borderColor: item.accentColor,
+                {
+                  backgroundColor: isActive ? `${accent}18` : colors.surface,
+                  borderColor: isActive ? accent : colors.border,
                 },
               ]}
             >
               <View
                 style={[
                   styles.indicator,
-                  { backgroundColor: isActive ? item.accentColor : THEME.colors.textMuted },
+                  { backgroundColor: isActive ? accent : colors.textMuted },
                 ]}
               />
               <Text
                 style={[
                   styles.pillText,
                   isActive
-                    ? { color: item.accentColor, fontWeight: '700' }
-                    : { color: THEME.colors.textSecondary },
+                    ? { color: accent, fontWeight: '700' }
+                    : { color: colors.textSecondary, fontWeight: '500' },
                 ]}
               >
                 {item.name}
@@ -61,13 +65,11 @@ export const CategoryPills: React.FC<CategoryPillsProps> = ({
 
 const styles = StyleSheet.create({
   wrapper: {
-    backgroundColor: THEME.colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: THEME.colors.border,
     paddingVertical: 8,
   },
   container: {
-    paddingHorizontal: THEME.spacing.md,
+    paddingHorizontal: 14,
     gap: 8,
   },
   pill: {
@@ -75,10 +77,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: THEME.radii.full,
-    backgroundColor: THEME.colors.surface,
+    borderRadius: 9999,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
   },
   indicator: {
     width: 6,
@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   pillText: {
-    fontSize: THEME.typography.sizes.sm,
-    fontWeight: '500',
+    fontSize: 12.5,
+    letterSpacing: 0.1,
   },
 });

@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AlertCircle, Bell, Settings, Trash2, X } from 'lucide-react-native';
+import { AlertCircle, Bell, Moon, Settings, Smartphone, Sun, Trash2, X } from 'lucide-react-native';
 import React from 'react';
 import {
   Alert,
@@ -13,8 +13,8 @@ import {
   View,
 } from 'react-native';
 import { CATEGORY_LIST } from '../../constants/categories';
-import { THEME } from '../../constants/theme';
 import { useSettingsStore } from '../../store/settingsStore';
+import { ThemeMode, useTheme } from '../../store/themeStore';
 
 interface SettingsModalProps {
   visible: boolean;
@@ -23,6 +23,7 @@ interface SettingsModalProps {
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }) => {
   const { preferences, toggleCategoryNotification, toggleBreakingAll } = useSettingsStore();
+  const { colors, themeMode, setThemeMode } = useTheme();
 
   const handleClearCache = async () => {
     Alert.alert(
@@ -55,86 +56,147 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.container}>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
           {/* Header */}
-          <View style={styles.header}>
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <View style={styles.titleRow}>
-              <Settings size={20} color={THEME.colors.textPrimary} />
-              <Text style={styles.modalTitle}>Settings & Preferences</Text>
+              <Settings size={20} color={colors.textPrimary} />
+              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Settings & Preferences</Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <X size={20} color={THEME.colors.textPrimary} />
+            <TouchableOpacity onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.surface }]}>
+              <X size={20} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.scrollArea} contentContainerStyle={styles.contentContainer}>
+            {/* Section: Appearance & Color Mode */}
+            <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>APPEARANCE & THEME</Text>
+            <View style={[styles.themeRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              {(['dark', 'light', 'system'] as ThemeMode[]).map((mode) => {
+                const isActive = themeMode === mode;
+                return (
+                  <TouchableOpacity
+                    key={mode}
+                    activeOpacity={0.75}
+                    onPress={() => setThemeMode(mode)}
+                    style={[
+                      styles.themeBtn,
+                      isActive && {
+                        backgroundColor: colors.primarySoft,
+                        borderColor: colors.primary,
+                      },
+                    ]}
+                  >
+                    {mode === 'dark' && (
+                      <Moon size={16} color={isActive ? colors.primary : colors.textSecondary} />
+                    )}
+                    {mode === 'light' && (
+                      <Sun size={16} color={isActive ? colors.primary : colors.textSecondary} />
+                    )}
+                    {mode === 'system' && (
+                      <Smartphone size={16} color={isActive ? colors.primary : colors.textSecondary} />
+                    )}
+                    <Text
+                      style={[
+                        styles.themeBtnText,
+                        {
+                          color: isActive ? colors.primary : colors.textSecondary,
+                          fontWeight: isActive ? '700' : '500',
+                        },
+                      ]}
+                    >
+                      {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
             {/* Notification Philosophy Banner */}
-            <View style={styles.infoBanner}>
-              <Bell size={18} color={THEME.colors.primary} />
-              <Text style={styles.infoText}>
+            <View
+              style={[
+                styles.infoBanner,
+                {
+                  backgroundColor: colors.primarySoft,
+                  borderColor: `${colors.primary}35`,
+                },
+              ]}
+            >
+              <Bell size={18} color={colors.primary} />
+              <Text style={[styles.infoText, { color: colors.textSecondary }]}>
                 ZeroDaily utilizes client-managed FCM topics. Your device subscribes directly to alert channels with zero server token tracking.
               </Text>
             </View>
 
-            {/* Section: Breaking Alerts */}
-            <Text style={styles.sectionHeader}>PUSH NOTIFICATION TOPICS</Text>
+            {/* Section: Push Notification Channels */}
+            <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>PUSH NOTIFICATION TOPICS</Text>
 
             {/* All Breaking Catch-All */}
-            <View style={styles.preferenceRow}>
+            <View style={[styles.preferenceRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View style={styles.prefTextCol}>
-                <Text style={styles.prefTitle}>All Breaking News (Global)</Text>
-                <Text style={styles.prefSub}>Subscribes to topic_breaking_all</Text>
+                <Text style={[styles.prefTitle, { color: colors.textPrimary }]}>All Breaking News (Global)</Text>
+                <Text style={[styles.prefSub, { color: colors.textMuted }]}>Subscribes to topic_breaking_all</Text>
               </View>
               <Switch
                 value={preferences.breaking_all}
                 onValueChange={toggleBreakingAll}
-                trackColor={{ false: THEME.colors.surface, true: THEME.colors.primary }}
-                thumbColor={THEME.colors.textPrimary}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor={colors.textPrimary}
               />
             </View>
 
             {/* Individual Categories */}
             {CATEGORY_LIST.filter((c) => c.key !== 'all').map((category) => {
               const isEnabled = preferences[category.key];
+              const catColor = colors[category.key] || category.accentColor;
               return (
-                <View key={category.key} style={styles.preferenceRow}>
+                <View
+                  key={category.key}
+                  style={[styles.preferenceRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                >
                   <View style={styles.prefTextCol}>
                     <View style={styles.catRow}>
-                      <View style={[styles.colorDot, { backgroundColor: category.accentColor }]} />
-                      <Text style={styles.prefTitle}>{category.name}</Text>
+                      <View style={[styles.colorDot, { backgroundColor: catColor }]} />
+                      <Text style={[styles.prefTitle, { color: colors.textPrimary }]}>{category.name}</Text>
                     </View>
-                    <Text style={styles.prefSub}>Topic: {category.fcmTopic}</Text>
+                    <Text style={[styles.prefSub, { color: colors.textMuted }]}>Topic: {category.fcmTopic}</Text>
                   </View>
                   <Switch
                     value={isEnabled}
                     onValueChange={() => toggleCategoryNotification(category.key)}
-                    trackColor={{ false: THEME.colors.surface, true: category.accentColor }}
-                    thumbColor={THEME.colors.textPrimary}
+                    trackColor={{ false: colors.border, true: catColor }}
+                    thumbColor={colors.textPrimary}
                   />
                 </View>
               );
             })}
 
             {/* Section: Storage & Maintenance */}
-            <Text style={[styles.sectionHeader, { marginTop: 24 }]}>STORAGE & CACHE</Text>
+            <Text style={[styles.sectionHeader, { color: colors.textMuted, marginTop: 24 }]}>
+              STORAGE & CACHE
+            </Text>
 
             <TouchableOpacity
               activeOpacity={0.7}
               onPress={handleClearCache}
-              style={styles.actionItem}
+              style={[styles.actionItem, { backgroundColor: colors.surface, borderColor: colors.border }]}
             >
-              <Trash2 size={18} color={THEME.colors.danger} />
+              <Trash2 size={18} color={colors.danger} />
               <View style={styles.prefTextCol}>
-                <Text style={[styles.prefTitle, { color: THEME.colors.danger }]}>Clear Offline Story Cache</Text>
-                <Text style={styles.prefSub}>Purges cached feed cards to reclaim local device space</Text>
+                <Text style={[styles.prefTitle, { color: colors.danger }]}>Clear Offline Story Cache</Text>
+                <Text style={[styles.prefSub, { color: colors.textMuted }]}>
+                  Purges cached feed cards to reclaim local device space
+                </Text>
               </View>
             </TouchableOpacity>
 
             {/* About Info */}
             <View style={styles.aboutFooter}>
-              <AlertCircle size={14} color={THEME.colors.textMuted} />
-              <Text style={styles.aboutText}>ZeroDaily Mobile • v1.0.0 • api.zerodaily.in</Text>
+              <AlertCircle size={14} color={colors.textMuted} />
+              <Text style={[styles.aboutText, { color: colors.textMuted }]}>
+                ZeroDaily Mobile • v1.0.0 • api.zerodaily.in
+              </Text>
             </View>
           </ScrollView>
         </View>
@@ -146,20 +208,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
   },
   container: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: THEME.spacing.md,
+    paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: THEME.colors.border,
   },
   titleRow: {
     flexDirection: 'row',
@@ -167,28 +226,46 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   modalTitle: {
-    fontSize: THEME.typography.sizes.lg,
+    fontSize: 18,
     fontWeight: '700',
-    color: THEME.colors.textPrimary,
   },
   closeBtn: {
     padding: 6,
-    borderRadius: THEME.radii.full,
-    backgroundColor: THEME.colors.surface,
+    borderRadius: 9999,
   },
   scrollArea: {
     flex: 1,
   },
   contentContainer: {
-    padding: THEME.spacing.md,
+    padding: 16,
     paddingBottom: 40,
+  },
+  themeRow: {
+    flexDirection: 'row',
+    padding: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 20,
+    gap: 6,
+  },
+  themeBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    gap: 6,
+  },
+  themeBtnText: {
+    fontSize: 13,
   },
   infoBanner: {
     flexDirection: 'row',
-    backgroundColor: `${THEME.colors.primary}15`,
     borderWidth: 1,
-    borderColor: `${THEME.colors.primary}40`,
-    borderRadius: THEME.radii.md,
+    borderRadius: 12,
     padding: 12,
     marginBottom: 20,
     gap: 10,
@@ -196,37 +273,31 @@ const styles = StyleSheet.create({
   },
   infoText: {
     flex: 1,
-    fontSize: THEME.typography.sizes.xs,
-    color: THEME.colors.textSecondary,
+    fontSize: 12,
     lineHeight: 18,
   },
   sectionHeader: {
-    fontSize: THEME.typography.sizes.xs,
+    fontSize: 11,
     fontWeight: '800',
-    color: THEME.colors.textMuted,
     letterSpacing: 1.2,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   preferenceRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: THEME.colors.surface,
     padding: 14,
-    borderRadius: THEME.radii.md,
+    borderRadius: 12,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
   },
   actionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: THEME.colors.surface,
     padding: 14,
-    borderRadius: THEME.radii.md,
+    borderRadius: 12,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
     gap: 12,
   },
   prefTextCol: {
@@ -244,13 +315,11 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   prefTitle: {
-    fontSize: THEME.typography.sizes.base,
+    fontSize: 15,
     fontWeight: '600',
-    color: THEME.colors.textPrimary,
   },
   prefSub: {
-    fontSize: THEME.typography.sizes.xs,
-    color: THEME.colors.textMuted,
+    fontSize: 11.5,
     marginTop: 2,
   },
   aboutFooter: {
@@ -261,7 +330,6 @@ const styles = StyleSheet.create({
     marginTop: 30,
   },
   aboutText: {
-    fontSize: THEME.typography.sizes.xs,
-    color: THEME.colors.textMuted,
+    fontSize: 11.5,
   },
 });
