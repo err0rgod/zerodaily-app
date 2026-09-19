@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
+  Dimensions,
   Easing,
   LayoutChangeEvent,
   PanResponder,
@@ -23,9 +24,6 @@ interface CardSwiperProps {
   onOpenSourceLink: (url: string) => void;
 }
 
-const SWIPE_THRESHOLD_RATIO = 0.12; // Swipe distance threshold relative to container height
-const SWIPE_VELOCITY_THRESHOLD = 0.3; // Flick velocity threshold
-
 export const CardSwiper: React.FC<CardSwiperProps> = ({
   onOpenFullRoast,
   onOpenSourceLink,
@@ -42,16 +40,46 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
 
   const { colors, isDark } = useTheme();
 
+  // Screen / Container dimensions
+  const [windowDim, setWindowDim] = useState(() => Dimensions.get('window'));
   const [containerHeight, setContainerHeight] = useState<number>(0);
-  const isAnimating = useRef<boolean>(false);
+
+  // Live mutable refs to permanently prevent stale closure traps in gesture handlers
+  const currentIndexRef = useRef<number>(currentIndex);
+  currentIndexRef.current = currentIndex;
+
+  const articlesRef = useRef<Article[]>(articles);
+  articlesRef.current = articles;
+
+  const containerHeightRef = useRef<number>(containerHeight);
+  containerHeightRef.current = containerHeight;
+
+  const isAnimatingRef = useRef<boolean>(false);
   const panY = useRef(new Animated.Value(0)).current;
 
-  // Initial feed load on mount
+  // Window dimension listener for screen rotations / resizes
+  useEffect(() => {
+    const sub = Dimensions.addEventListener('change', ({ window }) => {
+      setWindowDim(window);
+    });
+    return () => sub?.remove();
+  }, []);
+
+  // Safe height getter that never returns 0
+  const getCardHeight = useCallback((): number => {
+    if (containerHeightRef.current > 60) {
+      return containerHeightRef.current;
+    }
+    // Fallback based on window height minus top bar and bottom nav estimates
+    return Math.max(windowDim.height - 110, 400);
+  }, [windowDim.height]);
+
+  // Initial feed load
   useEffect(() => {
     loadInitialFeed();
   }, [loadInitialFeed]);
 
-  // Warm-up disk & memory image cache for category fallback pools on mount
+  // Warm-up disk & memory image cache for category fallback pools
   useEffect(() => {
     Object.values(CATEGORIES).forEach((cat) => {
       const pool = cat.fallbackImages || [cat.fallbackImage];
@@ -63,7 +91,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     });
   }, []);
 
-  // Image prefetching for upcoming 3 cards
+  // Image prefetching for upcoming cards
   useEffect(() => {
     if (articles.length > 0) {
       const nextBatch = articles.slice(currentIndex + 1, currentIndex + 4);
@@ -79,73 +107,81 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     }
   }, [currentIndex, articles]);
 
-  // Reset animation and pan position when category or active index changes externally (e.g. Home button click)
+  // Reset animation position when index or category changes
   useEffect(() => {
     panY.stopAnimation();
     panY.setValue(0);
-    isAnimating.current = false;
+    isAnimatingRef.current = false;
   }, [category, currentIndex, panY]);
 
-  // Capture container height dynamically for pixel-perfect card sizing
+  // Capture container height dynamically
   const handleLayout = (e: LayoutChangeEvent) => {
     const { height } = e.nativeEvent.layout;
-    if (height > 0 && height !== containerHeight) {
+    if (height > 60 && height !== containerHeight) {
       setContainerHeight(height);
+      containerHeightRef.current = height;
     }
   };
 
-  // Programmatic navigation to next card with underneath-deck reveal animation
+  // Programmatic navigation to next card
   const goToNextCard = useCallback(() => {
-    if (isAnimating.current || currentIndex >= articles.length - 1 || containerHeight <= 0) return;
-    isAnimating.current = true;
+    const curr = currentIndexRef.current;
+    const total = articlesRef.current.length;
+    const height = getCardHeight();
+
+    if (isAnimatingRef.current || curr >= total - 1) return;
+    isAnimatingRef.current = true;
 
     Animated.timing(panY, {
-      toValue: -containerHeight,
-      duration: 270,
-      easing: Easing.out(Easing.cubic),
+      toValue: -height,
+      duration: 230,
+      easing: Easing.out(Easing.quad),
       useNativeDriver: Platform.OS !== 'web',
     }).start(() => {
       panY.setValue(0);
-      setCurrentIndex(currentIndex + 1);
-      isAnimating.current = false;
+      setCurrentIndex(curr + 1);
+      isAnimatingRef.current = false;
     });
-  }, [currentIndex, articles.length, containerHeight, panY, setCurrentIndex]);
+  }, [getCardHeight, panY, setCurrentIndex]);
 
   // Programmatic navigation to previous card
   const goToPrevCard = useCallback(() => {
-    if (isAnimating.current || containerHeight <= 0) return;
+    const curr = currentIndexRef.current;
+    const height = getCardHeight();
 
-    if (currentIndex === 0) {
+    if (isAnimatingRef.current) return;
+
+    if (curr === 0) {
       refreshFeed();
       return;
     }
 
-    isAnimating.current = true;
+    isAnimatingRef.current = true;
     Animated.timing(panY, {
-      toValue: containerHeight,
-      duration: 270,
-      easing: Easing.out(Easing.cubic),
+      toValue: height,
+      duration: 230,
+      easing: Easing.out(Easing.quad),
       useNativeDriver: Platform.OS !== 'web',
     }).start(() => {
       panY.setValue(0);
-      setCurrentIndex(currentIndex - 1);
-      isAnimating.current = false;
+      setCurrentIndex(curr - 1);
+      isAnimatingRef.current = false;
     });
-  }, [currentIndex, containerHeight, panY, setCurrentIndex, refreshFeed]);
+  }, [getCardHeight, panY, setCurrentIndex, refreshFeed]);
 
-  // Web mouse wheel and keyboard shortcuts for seamless testing in desktop browser
+  // Web desktop mouse wheel and arrow key shortcuts
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
 
     let lastWheelTime = 0;
     const handleWheel = (e: WheelEvent) => {
       const now = Date.now();
-      if (now - lastWheelTime < 420) return;
+      if (now - lastWheelTime < 400) return;
 
-      if (e.deltaY > 25) {
+      if (e.deltaY > 20) {
         goToNextCard();
         lastWheelTime = now;
-      } else if (e.deltaY < -25) {
+      } else if (e.deltaY < -20) {
         goToPrevCard();
         lastWheelTime = now;
       }
@@ -170,90 +206,104 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     };
   }, [goToNextCard, goToPrevCard]);
 
-  // PanResponder for mobile touch drag & web mouse drag
+  // Robust PanResponder with zero closure stale-state and full Android touch lifecycle handling
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onStartShouldSetPanResponderCapture: () => false,
+
       onMoveShouldSetPanResponder: (_, gesture) => {
-        if (isAnimating.current) return false;
-        return Math.abs(gesture.dy) > 9 && Math.abs(gesture.dy) > Math.abs(gesture.dx) * 1.4;
+        if (isAnimatingRef.current) return false;
+        // Permissive diagonal tolerance so thumbs don't get rejected on phones
+        return Math.abs(gesture.dy) > 6 && Math.abs(gesture.dy) > Math.abs(gesture.dx) * 0.7;
       },
       onMoveShouldSetPanResponderCapture: (_, gesture) => {
-        if (isAnimating.current) return false;
-        return Math.abs(gesture.dy) > 9 && Math.abs(gesture.dy) > Math.abs(gesture.dx) * 1.4;
+        if (isAnimatingRef.current) return false;
+        return Math.abs(gesture.dy) > 6 && Math.abs(gesture.dy) > Math.abs(gesture.dx) * 0.7;
       },
+
       onPanResponderGrant: () => {
         panY.stopAnimation();
+        isAnimatingRef.current = false;
       },
+
       onPanResponderMove: (_, gesture) => {
-        if (isAnimating.current) return;
+        if (isAnimatingRef.current) return;
         panY.setValue(gesture.dy);
       },
-      onPanResponderRelease: (_, gesture) => {
-        if (isAnimating.current || containerHeight <= 0) return;
-        const threshold = containerHeight * SWIPE_THRESHOLD_RATIO;
-        const isUpSwipe = gesture.dy < -threshold || gesture.vy < -SWIPE_VELOCITY_THRESHOLD;
-        const isDownSwipe = gesture.dy > threshold || gesture.vy > SWIPE_VELOCITY_THRESHOLD;
 
-        if (isUpSwipe) {
-          if (currentIndex < articles.length - 1) {
-            // Swipe up: Active card slides up & reveals card underneath
-            isAnimating.current = true;
-            Animated.timing(panY, {
-              toValue: -containerHeight,
-              duration: 250,
-              easing: Easing.out(Easing.cubic),
-              useNativeDriver: Platform.OS !== 'web',
-            }).start(() => {
-              panY.setValue(0);
-              setCurrentIndex(currentIndex + 1);
-              isAnimating.current = false;
-            });
-          } else {
-            // Reached last card: spring back to 0
-            Animated.spring(panY, {
-              toValue: 0,
-              friction: 7,
-              tension: 45,
-              useNativeDriver: Platform.OS !== 'web',
-            }).start();
+      onPanResponderRelease: (_, gesture) => {
+        if (isAnimatingRef.current) return;
+
+        const height = getCardHeight();
+        const threshold = Math.min(height * 0.12, 80); // Distance threshold (80px max)
+        const isUpSwipe = gesture.dy < -threshold || gesture.vy < -0.25;
+        const isDownSwipe = gesture.dy > threshold || gesture.vy > 0.25;
+
+        const curr = currentIndexRef.current;
+        const total = articlesRef.current.length;
+
+        if (isUpSwipe && curr < total - 1) {
+          // Swipe up: Active card slides away, next card underneath scales up
+          isAnimatingRef.current = true;
+          Animated.timing(panY, {
+            toValue: -height,
+            duration: 220,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: Platform.OS !== 'web',
+          }).start(() => {
+            panY.setValue(0);
+            setCurrentIndex(curr + 1);
+            isAnimatingRef.current = false;
+          });
+        } else if (isDownSwipe && curr > 0) {
+          // Swipe down: Active card slides down, previous card underneath scales up
+          isAnimatingRef.current = true;
+          Animated.timing(panY, {
+            toValue: height,
+            duration: 220,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: Platform.OS !== 'web',
+          }).start(() => {
+            panY.setValue(0);
+            setCurrentIndex(curr - 1);
+            isAnimatingRef.current = false;
+          });
+        } else if (isDownSwipe && curr === 0) {
+          // Pull-down at top card: Refresh trigger
+          if (gesture.dy > 55) {
+            refreshFeed();
           }
-        } else if (isDownSwipe) {
-          if (currentIndex > 0) {
-            // Swipe down: Previous card slides down from top
-            isAnimating.current = true;
-            Animated.timing(panY, {
-              toValue: containerHeight,
-              duration: 250,
-              easing: Easing.out(Easing.cubic),
-              useNativeDriver: Platform.OS !== 'web',
-            }).start(() => {
-              panY.setValue(0);
-              setCurrentIndex(currentIndex - 1);
-              isAnimating.current = false;
-            });
-          } else {
-            // At first card: Pull-to-refresh
-            if (gesture.dy > 60) {
-              refreshFeed();
-            }
-            Animated.spring(panY, {
-              toValue: 0,
-              friction: 8,
-              tension: 50,
-              useNativeDriver: Platform.OS !== 'web',
-            }).start();
-          }
-        } else {
-          // Incomplete drag: spring back to rest
           Animated.spring(panY, {
             toValue: 0,
             friction: 7,
-            tension: 45,
+            tension: 50,
             useNativeDriver: Platform.OS !== 'web',
-          }).start();
+          }).start(() => {
+            isAnimatingRef.current = false;
+          });
+        } else {
+          // Swipe didn't exceed threshold: Snap back to rest
+          Animated.spring(panY, {
+            toValue: 0,
+            friction: 7,
+            tension: 50,
+            useNativeDriver: Platform.OS !== 'web',
+          }).start(() => {
+            isAnimatingRef.current = false;
+          });
         }
+      },
+
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderTerminate: () => {
+        isAnimatingRef.current = false;
+        Animated.spring(panY, {
+          toValue: 0,
+          friction: 7,
+          tension: 50,
+          useNativeDriver: Platform.OS !== 'web',
+        }).start();
       },
     })
   ).current;
@@ -269,72 +319,84 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     );
   }
 
+  const height = getCardHeight();
   const currentArticle = articles[currentIndex] || articles[0];
   const nextArticle = currentIndex < articles.length - 1 ? articles[currentIndex + 1] : null;
   const prevArticle = currentIndex > 0 ? articles[currentIndex - 1] : null;
 
   // Deck Layer Transformations:
-  // 1. Next Card Underneath: scales from 0.94 up to 1.0, translates Y from 16px to 0px
+  // 1. Next Card Underneath: scales from 0.94 up to 1.0, translates Y from 14px to 0px
   const nextCardScale = panY.interpolate({
-    inputRange: [-containerHeight || -600, 0],
+    inputRange: [-height, 0],
     outputRange: [1.0, 0.94],
     extrapolate: 'clamp',
   });
 
   const nextCardTranslateY = panY.interpolate({
-    inputRange: [-containerHeight || -600, 0],
-    outputRange: [0, 16],
+    inputRange: [-height, 0],
+    outputRange: [0, 14],
     extrapolate: 'clamp',
   });
 
   const nextCardOpacity = panY.interpolate({
-    inputRange: [-containerHeight || -600, 0],
-    outputRange: [1.0, 0.9],
+    inputRange: [-height, 0, 0.001],
+    outputRange: [1.0, 0.92, 0],
     extrapolate: 'clamp',
   });
 
   const nextCardDimmer = panY.interpolate({
-    inputRange: [-containerHeight || -600, 0],
-    outputRange: [0, 0.22],
+    inputRange: [-height, 0],
+    outputRange: [0, 0.2],
     extrapolate: 'clamp',
   });
 
-  // 2. Active Card: slides upward when swiping up; scales down slightly when swiping down to reveal prev
-  const activeCardTranslateY = panY.interpolate({
-    inputRange: [-containerHeight || -600, 0, containerHeight || 600],
-    outputRange: [
-      -containerHeight || -600,
-      0,
-      currentIndex === 0 ? 110 : 18, // Rubber band on card 0, slight depth movement if going to prev
-    ],
+  // 2. Previous Card Underneath (when swiping down to go back): scales from 0.94 up to 1.0
+  const prevCardScale = panY.interpolate({
+    inputRange: [0, height],
+    outputRange: [0.94, 1.0],
     extrapolate: 'clamp',
   });
 
-  const activeCardScale = panY.interpolate({
-    inputRange: [0, containerHeight || 600],
-    outputRange: [1.0, currentIndex > 0 ? 0.94 : 1.0],
-    extrapolate: 'clamp',
-  });
-
-  const activeCardOpacity = panY.interpolate({
-    inputRange: [0, containerHeight || 600],
-    outputRange: [1.0, currentIndex > 0 ? 0.8 : 1.0],
-    extrapolate: 'clamp',
-  });
-
-  // 3. Previous Card: sits above active card when user drags down
   const prevCardTranslateY = panY.interpolate({
-    inputRange: [0, containerHeight || 600],
-    outputRange: [-containerHeight || -600, 0],
+    inputRange: [0, height],
+    outputRange: [14, 0],
+    extrapolate: 'clamp',
+  });
+
+  const prevCardOpacity = panY.interpolate({
+    inputRange: [-0.001, 0, height],
+    outputRange: [0, 0.92, 1.0],
+    extrapolate: 'clamp',
+  });
+
+  const prevCardDimmer = panY.interpolate({
+    inputRange: [0, height],
+    outputRange: [0.2, 0],
+    extrapolate: 'clamp',
+  });
+
+  // 3. Active Card (ALWAYS ON TOP at zIndex: 10):
+  // When swiping up: slides up to -height
+  // When swiping down at card 0: rubber bands up to 90px
+  // When swiping down at card > 0: slides down to +height
+  const activeCardTranslateY = panY.interpolate({
+    inputRange: [-height, 0, height],
+    outputRange: [
+      -height,
+      0,
+      currentIndex === 0 ? 90 : height,
+    ],
     extrapolate: 'clamp',
   });
 
   // Pull-to-refresh badge interpolation
   const pullProgress = panY.interpolate({
-    inputRange: [0, 70],
+    inputRange: [0, 60],
     outputRange: [0, 1],
     extrapolate: 'clamp',
   });
+
+  const cardRenderHeight = containerHeight > 60 ? containerHeight : height;
 
   return (
     <View
@@ -342,116 +404,122 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
       onLayout={handleLayout}
       {...panResponder.panHandlers}
     >
-      {containerHeight > 0 && (
-        <View style={styles.deckWrapper}>
-          {/* Pull to refresh visual badge (when pulling down at card 0) */}
-          {currentIndex === 0 && (
-            <Animated.View
-              style={[
-                styles.pullRefreshBadge,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  opacity: pullProgress,
-                  transform: [
-                    {
-                      translateY: panY.interpolate({
-                        inputRange: [0, 100],
-                        outputRange: [-35, 12],
-                        extrapolate: 'clamp',
-                      }),
-                    },
-                  ],
-                },
-              ]}
-            >
-              {isRefreshing ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <RotateCcw size={14} color={colors.primary} />
-              )}
-              <Text style={[styles.pullRefreshText, { color: colors.textPrimary }]}>
-                {isRefreshing ? 'Refreshing stories...' : 'Pull down to refresh'}
-              </Text>
-            </Animated.View>
-          )}
-
-          {/* LAYER 1: NEXT CARD (Positioned Underneath Active Card) */}
-          {nextArticle && (
-            <Animated.View
-              style={[
-                styles.cardLayer,
-                {
-                  height: containerHeight,
-                  zIndex: 1,
-                  opacity: nextCardOpacity,
-                  transform: [{ translateY: nextCardTranslateY }, { scale: nextCardScale }],
-                },
-              ]}
-              pointerEvents="none"
-            >
-              <NewsCard
-                article={nextArticle}
-                cardHeight={containerHeight}
-                onOpenFullRoast={onOpenFullRoast}
-                onOpenSourceLink={onOpenSourceLink}
-              />
-              {/* Subtle dynamic depth shadow veil over underneath card */}
-              <Animated.View
-                style={[
-                  styles.depthVeil,
+      <View style={styles.deckWrapper}>
+        {/* Pull to refresh visual badge (when pulling down at card 0) */}
+        {currentIndex === 0 && (
+          <Animated.View
+            style={[
+              styles.pullRefreshBadge,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                opacity: pullProgress,
+                transform: [
                   {
-                    opacity: nextCardDimmer,
-                    backgroundColor: isDark ? '#000000' : '#475569',
+                    translateY: panY.interpolate({
+                      inputRange: [0, 100],
+                      outputRange: [-35, 12],
+                      extrapolate: 'clamp',
+                    }),
                   },
-                ]}
-              />
-            </Animated.View>
-          )}
+                ],
+              },
+            ]}
+          >
+            {isRefreshing ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <RotateCcw size={14} color={colors.primary} />
+            )}
+            <Text style={[styles.pullRefreshText, { color: colors.textPrimary }]}>
+              {isRefreshing ? 'Refreshing stories...' : 'Pull down to refresh'}
+            </Text>
+          </Animated.View>
+        )}
 
-          {/* LAYER 2: CURRENT ACTIVE CARD */}
+        {/* LAYER 1A: NEXT CARD (Underneath active card at zIndex: 4) */}
+        {nextArticle && (
           <Animated.View
             style={[
               styles.cardLayer,
               {
-                height: containerHeight,
-                zIndex: 2,
-                opacity: activeCardOpacity,
-                transform: [{ translateY: activeCardTranslateY }, { scale: activeCardScale }],
+                height: cardRenderHeight,
+                zIndex: 4,
+                opacity: nextCardOpacity,
+                transform: [{ translateY: nextCardTranslateY }, { scale: nextCardScale }],
               },
             ]}
+            pointerEvents="none"
           >
             <NewsCard
-              article={currentArticle}
-              cardHeight={containerHeight}
+              article={nextArticle}
+              cardHeight={cardRenderHeight}
               onOpenFullRoast={onOpenFullRoast}
               onOpenSourceLink={onOpenSourceLink}
             />
-          </Animated.View>
-
-          {/* LAYER 3: PREVIOUS CARD (Slides Down Over Current When Swiping Down) */}
-          {prevArticle && (
             <Animated.View
               style={[
-                styles.cardLayer,
+                styles.depthVeil,
                 {
-                  height: containerHeight,
-                  zIndex: 3,
-                  transform: [{ translateY: prevCardTranslateY }],
+                  opacity: nextCardDimmer,
+                  backgroundColor: isDark ? '#000000' : '#475569',
                 },
               ]}
-              pointerEvents="none"
-            >
-              <NewsCard
-                article={prevArticle}
-                cardHeight={containerHeight}
-                onOpenFullRoast={onOpenFullRoast}
-                onOpenSourceLink={onOpenSourceLink}
-              />
-            </Animated.View>
-          )}
-        </View>
-      )}
+            />
+          </Animated.View>
+        )}
+
+        {/* LAYER 1B: PREVIOUS CARD (Underneath active card at zIndex: 3) */}
+        {prevArticle && (
+          <Animated.View
+            style={[
+              styles.cardLayer,
+              {
+                height: cardRenderHeight,
+                zIndex: 3,
+                opacity: prevCardOpacity,
+                transform: [{ translateY: prevCardTranslateY }, { scale: prevCardScale }],
+              },
+            ]}
+            pointerEvents="none"
+          >
+            <NewsCard
+              article={prevArticle}
+              cardHeight={cardRenderHeight}
+              onOpenFullRoast={onOpenFullRoast}
+              onOpenSourceLink={onOpenSourceLink}
+            />
+            <Animated.View
+              style={[
+                styles.depthVeil,
+                {
+                  opacity: prevCardDimmer,
+                  backgroundColor: isDark ? '#000000' : '#475569',
+                },
+              ]}
+            />
+          </Animated.View>
+        )}
+
+        {/* LAYER 2: ACTIVE CARD (ALWAYS ON TOP at zIndex: 10) */}
+        <Animated.View
+          style={[
+            styles.cardLayer,
+            {
+              height: cardRenderHeight,
+              zIndex: 10,
+              transform: [{ translateY: activeCardTranslateY }],
+            },
+          ]}
+        >
+          <NewsCard
+            article={currentArticle}
+            cardHeight={cardRenderHeight}
+            onOpenFullRoast={onOpenFullRoast}
+            onOpenSourceLink={onOpenSourceLink}
+          />
+        </Animated.View>
+      </View>
     </View>
   );
 };
