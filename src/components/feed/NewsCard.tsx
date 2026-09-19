@@ -77,7 +77,7 @@ export const NewsCard: React.FC<NewsCardProps> = ({
           },
         ]}
       >
-        {/* 1. Hero Image with 1.5s Long-Press Zoom, Error Fallback & Adaptive Gradient Scrim */}
+        {/* 1. Hero Image with Theme-Adaptive Filling, Full Image Display (contain), 1.5s Long-Press Zoom */}
         <TouchableOpacity
           activeOpacity={0.94}
           delayLongPress={1500}
@@ -87,13 +87,34 @@ export const NewsCard: React.FC<NewsCardProps> = ({
             }
             onOpenImageViewer?.(imageUri, article.heading, article.category);
           }}
-          style={[styles.imageContainer, { backgroundColor: isDark ? '#161B28' : '#E2E8F0' }]}
+          style={[
+            styles.imageContainer,
+            { backgroundColor: isDark ? '#0B0E17' : '#F1F5F9' },
+          ]}
         >
+          {/* Theme-Adaptive Ambient Blur Background for Width/Height Filling */}
+          <Image
+            source={{ uri: imageUri }}
+            style={styles.ambientBlurImage}
+            contentFit="cover"
+            blurRadius={Platform.OS === 'android' ? 16 : 26}
+            cachePolicy="memory-disk"
+          />
+          <View
+            style={[
+              StyleSheet.absoluteFillObject,
+              {
+                backgroundColor: isDark ? 'rgba(11, 14, 23, 0.52)' : 'rgba(241, 245, 249, 0.55)',
+              },
+            ]}
+          />
+
+          {/* Uncropped Full Foreground Image */}
           <Image
             source={{ uri: imageUri }}
             style={styles.image}
-            contentFit="cover"
-            transition={250}
+            contentFit="contain"
+            transition={200}
             cachePolicy="memory-disk"
             onError={() => {
               if (imageUri !== dynamicFallback) {
@@ -101,9 +122,10 @@ export const NewsCard: React.FC<NewsCardProps> = ({
               }
             }}
           />
+
           <LinearGradient
             colors={scrimColors}
-            locations={[0.42, 0.84, 1]}
+            locations={[0.55, 0.85, 1]}
             style={styles.gradientOverlay}
           />
 
@@ -242,6 +264,13 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '47%',
     position: 'relative',
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ambientBlurImage: {
+    ...StyleSheet.absoluteFillObject,
+    transform: [{ scale: 1.15 }],
   },
   image: {
     width: '100%',
