@@ -10,7 +10,7 @@ import {
   View,
   ViewToken,
 } from 'react-native';
-import { CATEGORIES } from '../../constants/categories';
+import { CATEGORIES, getDynamicFallbackImage } from '../../constants/categories';
 import { useFeedStore } from '../../store/feedStore';
 import { useTheme } from '../../store/themeStore';
 import { Article } from '../../types';
@@ -45,16 +45,19 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     loadInitialFeed();
   }, [loadInitialFeed]);
 
-  // Warm-up disk & memory image cache for all category fallback images on mount
+  // Warm-up disk & memory image cache for category fallback image pools on mount
   useEffect(() => {
     Object.values(CATEGORIES).forEach((cat) => {
-      if (cat.fallbackImage) {
-        Image.prefetch(cat.fallbackImage).catch(() => {});
-      }
+      const pool = cat.fallbackImages || [cat.fallbackImage];
+      pool.forEach((img) => {
+        if (img) {
+          Image.prefetch(img).catch(() => {});
+        }
+      });
     });
   }, []);
 
-  // Image prefetching for upcoming 3 cards (with category fallback support)
+  // Image prefetching for upcoming 3 cards (with dynamic category fallback support)
   useEffect(() => {
     if (articles.length > 0) {
       const nextBatch = articles.slice(currentIndex + 1, currentIndex + 4);
@@ -62,7 +65,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
         const url =
           (article.image_url && article.image_url.trim().length > 0)
             ? article.image_url
-            : CATEGORIES[article.category]?.fallbackImage;
+            : getDynamicFallbackImage(article.id, article.category);
         if (url) {
           Image.prefetch(url).catch(() => {});
         }

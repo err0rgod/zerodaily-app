@@ -1,4 +1,4 @@
-import { CATEGORIES, CATEGORY_LIST } from '../src/constants/categories';
+import { CATEGORIES, CATEGORY_LIST, getDynamicFallbackImage } from '../src/constants/categories';
 import { DARK_THEME, LIGHT_THEME } from '../src/constants/theme';
 import { formatRelativeTime } from '../src/utils/date';
 import { extractDomain, getReadingEstimate } from '../src/utils/url';
@@ -54,3 +54,21 @@ describe('Theme Palettes & Dual-Mode Contrast', () => {
     expect(LIGHT_THEME.colors.statusBarStyle).toBe('dark');
   });
 });
+
+describe('Dynamic Category Image Fallback System', () => {
+  test('all categories provide multi-image pools', () => {
+    CATEGORY_LIST.forEach((cat) => {
+      expect(cat.fallbackImages.length).toBeGreaterThanOrEqual(4);
+    });
+  });
+
+  test('different article IDs in same category get different fallback images', () => {
+    const img1 = getDynamicFallbackImage('article-alpha', 'programming');
+    const img2 = getDynamicFallbackImage('article-beta', 'programming');
+    const img3 = getDynamicFallbackImage('article-gamma', 'programming');
+    const set = new Set([img1, img2, img3]);
+    // With 4 images in pool and different hashes, set size should be > 1
+    expect(set.size).toBeGreaterThan(1);
+  });
+});
+

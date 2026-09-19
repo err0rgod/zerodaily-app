@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Bookmark, ChevronRight, ExternalLink, Flame, Globe, Share2 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { CATEGORIES, DEFAULT_FALLBACK_IMAGE } from '../../constants/categories';
+import { CATEGORIES, DEFAULT_FALLBACK_IMAGE, getDynamicFallbackImage } from '../../constants/categories';
 import { useBookmarkStore } from '../../store/bookmarkStore';
 import { useTheme } from '../../store/themeStore';
 import { Article } from '../../types';
@@ -31,19 +31,19 @@ export const NewsCard: React.FC<NewsCardProps> = ({
   const bookmarked = isBookmarked(article.id);
 
   const categoryMeta = CATEGORIES[article.category] || CATEGORIES.all;
-  const fallbackImage = categoryMeta.fallbackImage || DEFAULT_FALLBACK_IMAGE;
+  const dynamicFallback = getDynamicFallbackImage(article.id, article.category);
   const categoryAccent = article.category === 'all'
     ? colors.primary
     : (colors[article.category] || categoryMeta.accentColor);
 
-  // Track active image with graceful fallback on 404 / load error
+  // Track active image with graceful dynamic category fallback on 404 / load error
   const isValidUrl = Boolean(article.image_url && article.image_url.trim().length > 0);
-  const [imageUri, setImageUri] = useState<string>(isValidUrl ? article.image_url : fallbackImage);
+  const [imageUri, setImageUri] = useState<string>(isValidUrl ? article.image_url : dynamicFallback);
 
   useEffect(() => {
     const valid = Boolean(article.image_url && article.image_url.trim().length > 0);
-    setImageUri(valid ? article.image_url : fallbackImage);
-  }, [article.image_url, fallbackImage]);
+    setImageUri(valid ? article.image_url : dynamicFallback);
+  }, [article.image_url, dynamicFallback]);
 
   const handleToggleBookmark = async () => {
     await toggleBookmark(article);
@@ -84,8 +84,8 @@ export const NewsCard: React.FC<NewsCardProps> = ({
             transition={250}
             cachePolicy="memory-disk"
             onError={() => {
-              if (imageUri !== fallbackImage) {
-                setImageUri(fallbackImage);
+              if (imageUri !== dynamicFallback) {
+                setImageUri(dynamicFallback);
               }
             }}
           />

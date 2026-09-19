@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { CATEGORIES, DEFAULT_FALLBACK_IMAGE } from '../../constants/categories';
+import { CATEGORIES, getDynamicFallbackImage } from '../../constants/categories';
 import { useBookmarkStore } from '../../store/bookmarkStore';
 import { useFeedStore } from '../../store/feedStore';
 import { useTheme } from '../../store/themeStore';
@@ -41,7 +41,7 @@ export const BookmarksModal: React.FC<BookmarksModalProps> = ({ visible, onClose
 
   const renderItem = ({ item }: { item: Article }) => {
     const categoryMeta = CATEGORIES[item.category] || CATEGORIES.all;
-    const fallback = categoryMeta.fallbackImage || DEFAULT_FALLBACK_IMAGE;
+    const fallback = getDynamicFallbackImage(item.id, item.category);
     const imageUri = (item.image_url && item.image_url.trim().length > 0) ? item.image_url : fallback;
     const catColor = colors[item.category] || categoryMeta.accentColor;
 

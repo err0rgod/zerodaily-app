@@ -12,7 +12,7 @@ import {
   View,
 } from 'react-native';
 import { fetchArticleById, fetchNotificationHistory } from '../../api/client';
-import { CATEGORIES, DEFAULT_FALLBACK_IMAGE } from '../../constants/categories';
+import { CATEGORIES, getDynamicFallbackImage } from '../../constants/categories';
 import { useFeedStore } from '../../store/feedStore';
 import { useTheme } from '../../store/themeStore';
 import { NotificationItem } from '../../types';
@@ -53,7 +53,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
 
   const renderItem = ({ item }: { item: NotificationItem }) => {
     const categoryMeta = CATEGORIES[item.category] || CATEGORIES.all;
-    const fallback = categoryMeta.fallbackImage || DEFAULT_FALLBACK_IMAGE;
+    const fallback = getDynamicFallbackImage(item.article_id, item.category);
     const imageUri = (item.image_url && item.image_url.trim().length > 0) ? item.image_url : fallback;
     const catColor = colors[item.category] || categoryMeta.accentColor;
 

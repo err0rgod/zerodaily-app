@@ -22,6 +22,7 @@ export interface CategoryMeta {
   accentColor: string;
   fcmTopic: string;
   fallbackImage: string;
+  fallbackImages: string[];
 }
 
 /** Article schema matching DynamoDB zerodaily-articles and API response */
