@@ -24,6 +24,7 @@ const DEFAULT_PREFERENCES: NotificationPreferences = {
   robotics: false,
   defense_aerospace: false,
   hardware: false,
+  finance: false,
 };
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({

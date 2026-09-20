@@ -151,13 +151,14 @@ Scan the QR code using the **Expo Go** app on Android or iOS.
 
 | Category | Key | Color | FCM Topic String | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| **Top Feed** | `all` | Emerald (`#10B981`) | `topic_breaking_all` | Unified feed across all 6 domains. |
+| **Top Feed** | `all` | Emerald (`#10B981`) | `topic_breaking_all` | Unified feed across all 7 domains. |
 | **Cybersecurity** | `cybersec` | Red (`#EF4444`) | `topic_cybersec` | Zero-days, CVEs, breach alerts. |
 | **Artificial Intelligence** | `ai` | Violet (`#A855F7`) | `topic_ai` | Frontier LLMs, benchmark disruptions. |
 | **Software Engineering** | `programming` | Emerald (`#10B981`) | `topic_programming` | Runtimes, kernel bugs, developer culture. |
 | **Robotics** | `robotics` | Amber (`#F59E0B`) | `topic_robotics` | Humanoid milestones, automation. |
 | **Defense & Aerospace** | `defense_aerospace` | Cyan (`#06B6D4`) | `topic_defense_aerospace` | Orbital tests, hypersonics, defense tech. |
 | **Hardware & Silicon** | `hardware` | Copper (`#F97316`) | `topic_hardware` | Transistor tape-outs, GPUs, packaging. |
+| **Finance** | `finance` | Teal (`#14B8A6`) | `topic_finance` | Fintech, algorithmic trading, crypto, venture capital. |
 
 ---
 

@@ -80,6 +80,19 @@ export const MOCK_ARTICLES: Article[] = [
     is_breaking: true,
     push_punchline: 'TSMC 2nm GAA Silicon Tapeout Breaks Quantum Limits',
   },
+  {
+    id: 'https://bloomberg.com/news/articles/2026-09-20/high-frequency-trading-flash-crash-algo.html',
+    category: 'finance',
+    title: 'High-Frequency Trading Algorithm Liquidates Portfolio in 40 Microseconds',
+    heading: 'Quant Algo Liquidates $400M in 40 Microseconds Because Market Data Had an Extra Comma',
+    shortSummary: 'A high-frequency market-making bot misinterpreted a stray comma in an exchange CSV feed as an impending hyperinflation event, promptly dumping 200,000 index futures before its cooling fans even spun up to speed.',
+    fullSummary: 'In the fast-paced world of algorithmic arbitrage, humans are merely meat-based spectators watching fiber-optic cables wage economic warfare. When a sub-millisecond data feed experienced a malformed delimiter, the trading bot concluded that civilization had collapsed and initiated a fire sale.\n\nRisk officers spent the afternoon staring at monitors with iced coffee in hand, wondering how to explain to sovereign wealth fund managers that their retirement holdings were temporarily vaporized by a regex syntax error.',
+    published_at: new Date(Date.now() - 1000 * 60 * 60).toISOString(), // 1h ago
+    link: 'https://bloomberg.com/news/articles/2026-09-20/high-frequency-trading-flash-crash-algo.html',
+    image_url: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&auto=format&fit=crop&q=80',
+    is_breaking: false,
+    push_punchline: 'Quant Bot Dumps $400M Over CSV Syntax Error',
+  },
 ];
 
 /** Seed notification alerts for the Notification Center */

@@ -111,6 +111,21 @@ export const CATEGORIES: Record<CategoryKey, CategoryMeta> = {
       'https://images.unsplash.com/photo-1555680202-c86f0e12f086?w=800&auto=format&fit=crop&q=80',
     ],
   },
+  finance: {
+    key: 'finance',
+    name: 'Finance',
+    description: 'Fintech, algorithmic trading, crypto economics, and venture capital.',
+    badgeColor: THEME.colors.finance,
+    accentColor: THEME.colors.finance,
+    fcmTopic: 'topic_finance',
+    fallbackImage: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&auto=format&fit=crop&q=80',
+    fallbackImages: [
+      'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1642543492481-44e81e3914a7?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=800&auto=format&fit=crop&q=80',
+    ],
+  },
 };
 
 export const DEFAULT_FALLBACK_IMAGE = CATEGORIES.all.fallbackImage;

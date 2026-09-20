@@ -11,7 +11,8 @@ export type CategoryKey =
   | 'programming'
   | 'robotics'
   | 'defense_aerospace'
-  | 'hardware';
+  | 'hardware'
+  | 'finance';
 
 /** Category metadata structure matching GET /api/v1/categories */
 export interface CategoryMeta {

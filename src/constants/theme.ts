@@ -35,6 +35,7 @@ export interface ThemeColors {
   robotics: string;
   defense_aerospace: string;
   hardware: string;
+  finance: string;
 
   // Overlays, Scrims & Borders
   border: string;
@@ -107,6 +108,7 @@ export const DARK_THEME_COLORS: ThemeColors = {
   robotics: '#F59E0B',
   defense_aerospace: '#06B6D4',
   hardware: '#F97316',
+  finance: '#14B8A6',
 
   border: '#1E2538',
   borderLight: '#2B354F',
@@ -147,6 +149,7 @@ export const LIGHT_THEME_COLORS: ThemeColors = {
   robotics: '#D97706',
   defense_aerospace: '#0891B2',
   hardware: '#EA580C',
+  finance: '#0D9488',
 
   border: '#E2E8F0',
   borderLight: '#CBD5E1',

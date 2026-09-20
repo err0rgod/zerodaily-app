@@ -26,6 +26,7 @@ All topics follow the lower-case naming convention:
 | **Robotics & Automation** | `topic_robotics` | Humanoid milestones, major industrial automation breakthroughs. |
 | **Defense & Aerospace** | `topic_defense_aerospace`| Satellite launches, hypersonic updates, defense technology events. |
 | **Hardware & Silicon** | `topic_hardware` | GPU shortages, architectural tape-outs, semiconductor advances. |
+| **Finance** | `topic_finance` | Market flash crashes, fintech disruptions, crypto/algo volatility. |
 
 ---
 
