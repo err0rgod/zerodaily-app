@@ -6,16 +6,41 @@ export function extractDomain(url?: string): string {
   if (!url || typeof url !== 'string') return 'Source';
 
   try {
-    const parsed = new URL(url);
-    let host = parsed.hostname;
+    const trimmed = url.trim();
+    const parsed = new URL(trimmed.startsWith('http') ? trimmed : `https://${trimmed}`);
+    let host = parsed.hostname.toLowerCase();
+
+    // Strip common leading subdomains
     if (host.startsWith('www.')) {
       host = host.slice(4);
     }
+    if (host.startsWith('m.')) {
+      host = host.slice(2);
+    }
+    if (host.startsWith('amp.')) {
+      host = host.slice(4);
+    }
+
+    // Clean up verbose nested portals (e.g. Economic Times, Times of India)
+    if (host.includes('economictimes')) {
+      return 'economictimes.com';
+    }
+    if (host.includes('timesofindia')) {
+      return 'timesofindia.com';
+    }
+
     return host || 'Source';
   } catch {
     // Regex fallback if URL constructor fails on unconventional schemes
-    const match = url.match(/^(?:https?:\/\/)?(?:www\.)?([^\/\?#]+)/i);
-    return match ? match[1] : 'Source';
+    const match = url.trim().match(/^(?:https?:\/\/)?(?:www\.)?(?:m\.)?(?:amp\.)?([^\/\?#]+)/i);
+    let host = match ? match[1].toLowerCase() : 'Source';
+    if (host.includes('economictimes')) {
+      return 'economictimes.com';
+    }
+    if (host.includes('timesofindia')) {
+      return 'timesofindia.com';
+    }
+    return host;
   }
 }
 

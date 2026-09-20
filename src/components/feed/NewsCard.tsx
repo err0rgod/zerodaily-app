@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Bookmark, ExternalLink, Globe, Share2 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { CATEGORIES, DEFAULT_FALLBACK_IMAGE, getDynamicFallbackImage } from '../../constants/categories';
 import { useBookmarkStore } from '../../store/bookmarkStore';
 import { useTheme } from '../../store/themeStore';
@@ -31,6 +31,14 @@ export const NewsCard: React.FC<NewsCardProps> = ({
   const { colors, isDark } = useTheme();
   const { isBookmarked, toggleBookmark } = useBookmarkStore();
   const bookmarked = isBookmarked(article.id);
+
+  const { fontScale } = useWindowDimensions();
+  const isLargeFont = fontScale > 1.15;
+  const isCompactScreen = cardHeight < 620;
+
+  // Dynamically balance typography limits so large fonts never crowd out footer
+  const headingLines = isLargeFont || isCompactScreen ? 2 : 3;
+  const summaryLines = isLargeFont ? 5 : (isCompactScreen ? 6 : 7);
 
   const categoryMeta = CATEGORIES[article.category] || CATEGORIES.all;
   const dynamicFallback = getDynamicFallbackImage(article.id, article.category);
@@ -87,7 +95,10 @@ export const NewsCard: React.FC<NewsCardProps> = ({
           }}
           style={[
             styles.imageContainer,
-            { backgroundColor: isDark ? '#080B12' : '#F1F5F9' },
+            {
+              backgroundColor: isDark ? '#080B12' : '#F1F5F9',
+              height: isLargeFont ? '42%' : '47%',
+            },
           ]}
         >
           {/* Uncropped Full Foreground Image with Memory-Disk Cache Policy */}
@@ -112,11 +123,11 @@ export const NewsCard: React.FC<NewsCardProps> = ({
           {/* Floating Metadata Pill Row: ZERODAILY brand only + Reading metrics */}
           <View style={styles.overlayRow}>
             <View style={styles.brandBadge}>
-              <Text style={styles.brandTitle}>ZERODAILY</Text>
+              <Text style={styles.brandTitle} maxFontSizeMultiplier={1.15}>ZERODAILY</Text>
             </View>
 
             <View style={styles.metaChip}>
-              <Text style={styles.metaChipText}>{relativeTime}</Text>
+              <Text style={styles.metaChipText} maxFontSizeMultiplier={1.15}>{relativeTime}</Text>
             </View>
           </View>
         </TouchableOpacity>
@@ -126,15 +137,17 @@ export const NewsCard: React.FC<NewsCardProps> = ({
           <View style={styles.headlineAndSummary}>
             <Text
               style={[styles.heading, { color: colors.textPrimary }]}
-              numberOfLines={3}
+              numberOfLines={headingLines}
+              maxFontSizeMultiplier={1.22}
             >
               {article.heading}
             </Text>
 
             <Text
               style={[styles.summary, { color: colors.textSecondary }]}
-              numberOfLines={9}
+              numberOfLines={summaryLines}
               ellipsizeMode="tail"
+              maxFontSizeMultiplier={1.22}
             >
               {article.shortSummary}
             </Text>
@@ -167,6 +180,8 @@ export const NewsCard: React.FC<NewsCardProps> = ({
             <Text
               style={[styles.sourceButtonText, { color: colors.textSecondary }]}
               numberOfLines={1}
+              ellipsizeMode="tail"
+              maxFontSizeMultiplier={1.15}
             >
               {domain}
             </Text>
@@ -278,23 +293,25 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 16,
     paddingTop: 10,
-    paddingBottom: 8,
-    justifyContent: 'space-between',
+    paddingBottom: 6,
+    justifyContent: 'flex-start',
+    overflow: 'hidden',
   },
   headlineAndSummary: {
     flex: 1,
+    overflow: 'hidden',
   },
   heading: {
-    fontSize: 21.5,
+    fontSize: 21,
     fontWeight: '800',
-    lineHeight: 28,
-    marginBottom: 10,
-    letterSpacing: -0.35,
+    lineHeight: 27.5,
+    marginBottom: 8,
+    letterSpacing: -0.3,
   },
   summary: {
-    fontSize: 15.5,
-    lineHeight: 23.5,
-    letterSpacing: 0.15,
+    fontSize: 15,
+    lineHeight: 22.5,
+    letterSpacing: 0.1,
   },
   footerContainer: {
     flexDirection: 'row',
@@ -303,20 +320,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderTopWidth: 1,
+    flexShrink: 0,
   },
   sourceButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 11,
-    paddingVertical: 6.5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 9999,
     borderWidth: 1,
     gap: 5,
-    maxWidth: '65%',
+    flexShrink: 1,
+    maxWidth: '68%',
   },
   sourceButtonText: {
     fontSize: 12,
     fontWeight: '600',
+    flexShrink: 1,
   },
   actionButtonsRow: {
     flexDirection: 'row',

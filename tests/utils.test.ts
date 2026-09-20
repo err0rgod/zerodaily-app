@@ -36,6 +36,8 @@ describe('Editorial URL & Reading Utilities', () => {
     expect(extractDomain('https://www.tomshardware.com/tech/news-123')).toBe('tomshardware.com');
     expect(extractDomain('https://dev.to/username/article-title')).toBe('dev.to');
     expect(extractDomain('https://techcrunch.com/2026/09/18/story/')).toBe('techcrunch.com');
+    expect(extractDomain('https://economictimes.indiatimes.com/tech/technology/news-123.cms')).toBe('economictimes.com');
+    expect(extractDomain('https://m.economictimes.indiatimes.com/markets/stocks')).toBe('economictimes.com');
     expect(extractDomain('')).toBe('Source');
   });
 

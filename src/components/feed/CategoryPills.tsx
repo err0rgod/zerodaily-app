@@ -40,6 +40,8 @@ export const CategoryPills: React.FC<CategoryPillsProps> = ({
               ]}
             >
               <Text
+                numberOfLines={1}
+                maxFontSizeMultiplier={1.15}
                 style={[
                   styles.pillText,
                   isActive

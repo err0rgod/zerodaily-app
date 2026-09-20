@@ -64,7 +64,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       ),
       badge: bookmarkCount > 0 ? (
         <View style={[styles.counterBadge, { backgroundColor: colors.primary }]}>
-          <Text style={styles.counterText}>{bookmarkCount > 9 ? '9+' : bookmarkCount}</Text>
+          <Text style={styles.counterText} maxFontSizeMultiplier={1.0}>{bookmarkCount > 9 ? '9+' : bookmarkCount}</Text>
         </View>
       ) : null,
     },
@@ -97,6 +97,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               </View>
               <Text
                 numberOfLines={1}
+                maxFontSizeMultiplier={1.12}
                 style={[
                   styles.tabLabel,
                   {
