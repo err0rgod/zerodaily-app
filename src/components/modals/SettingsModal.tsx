@@ -1,9 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AlertCircle, Bell, Moon, Settings, Smartphone, Sun, Trash2, X } from 'lucide-react-native';
-import React from 'react';
+import * as Haptics from 'expo-haptics';
+import { AlertCircle, Bell, Moon, Settings, Smartphone, Sun, Trash2, X, Zap } from 'lucide-react-native';
+import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Modal,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -13,6 +16,7 @@ import {
   View,
 } from 'react-native';
 import { CATEGORY_LIST } from '../../constants/categories';
+import { scheduleTestBreakingAlert } from '../../services/notificationService';
 import { useSettingsStore } from '../../store/settingsStore';
 import { ThemeMode, useTheme } from '../../store/themeStore';
 
@@ -24,6 +28,7 @@ interface SettingsModalProps {
 export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }) => {
   const { preferences, toggleCategoryNotification, toggleBreakingAll } = useSettingsStore();
   const { colors, themeMode, setThemeMode } = useTheme();
+  const [isSendingTest, setIsSendingTest] = useState<boolean>(false);
 
   const handleClearCache = async () => {
     Alert.alert(
@@ -47,6 +52,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
         },
       ]
     );
+  };
+
+  const handleSendTestAlert = async () => {
+    if (isSendingTest) return;
+    setIsSendingTest(true);
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    }
+
+    try {
+      await scheduleTestBreakingAlert('cybersec', 2);
+      Alert.alert(
+        'Test Alert Scheduled',
+        'A breaking alert notification will arrive in 2 seconds. Minimize or lock your phone to observe the banner!'
+      );
+    } catch {
+      Alert.alert('Error', 'Unable to trigger test notification. Check app permissions.');
+    } finally {
+      setIsSendingTest(false);
+    }
   };
 
   return (
@@ -171,6 +196,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                 </View>
               );
             })}
+
+            {/* Test Notification Action */}
+            <TouchableOpacity
+              activeOpacity={0.75}
+              onPress={handleSendTestAlert}
+              disabled={isSendingTest}
+              style={[
+                styles.actionItem,
+                {
+                  backgroundColor: `${colors.primary}12`,
+                  borderColor: colors.primary,
+                  marginTop: 4,
+                },
+              ]}
+            >
+              {isSendingTest ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Zap size={18} color={colors.primary} />
+              )}
+              <View style={styles.prefTextCol}>
+                <Text style={[styles.prefTitle, { color: colors.primary }]}>Send Test Breaking Alert</Text>
+                <Text style={[styles.prefSub, { color: colors.textMuted }]}>
+                  Triggers an instant 2-second alert banner with sound & vibration
+                </Text>
+              </View>
+            </TouchableOpacity>
 
             {/* Section: Storage & Maintenance */}
             <Text style={[styles.sectionHeader, { color: colors.textMuted, marginTop: 24 }]}>

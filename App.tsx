@@ -17,6 +17,7 @@ import { openArticleSource } from './src/components/webview/ArticleReader';
 import { useNotifications } from './src/hooks/useNotifications';
 import { useBookmarkStore } from './src/store/bookmarkStore';
 import { useFeedStore } from './src/store/feedStore';
+import { useNotificationStore } from './src/store/notificationStore';
 import { useTheme, useThemeStore } from './src/store/themeStore';
 import { Article, CategoryKey } from './src/types';
 
@@ -31,6 +32,7 @@ export default function App() {
   // Store access
   const { category, setCategory, currentIndex, setCurrentIndex, refreshFeed } = useFeedStore();
   const { bookmarks, loadBookmarks } = useBookmarkStore();
+  const { hasUnread } = useNotificationStore();
 
   // Modal & Navigation states
   const [activeTab, setActiveTab] = useState<BottomNavTab>('home');
@@ -110,7 +112,7 @@ export default function App() {
                 activeTab={activeTab}
                 onTabPress={handleTabPress}
                 bookmarkCount={bookmarks.length}
-                hasUnreadNotifications={false}
+                hasUnreadNotifications={hasUnread}
               />
             </View>
 
