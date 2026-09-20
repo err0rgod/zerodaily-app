@@ -38,14 +38,9 @@ export const NewsCard: React.FC<NewsCardProps> = ({
     ? colors.primary
     : (colors[article.category] || categoryMeta.accentColor);
 
-  // Track active image with graceful dynamic category fallback on 404 / load error
   const isValidUrl = Boolean(article.image_url && article.image_url.trim().length > 0);
-  const [imageUri, setImageUri] = useState<string>(isValidUrl ? article.image_url : dynamicFallback);
-
-  useEffect(() => {
-    const valid = Boolean(article.image_url && article.image_url.trim().length > 0);
-    setImageUri(valid ? article.image_url : dynamicFallback);
-  }, [article.image_url, dynamicFallback]);
+  const [hasLoadError, setHasLoadError] = useState<boolean>(false);
+  const imageUri = (isValidUrl && !hasLoadError) ? article.image_url : dynamicFallback;
 
   const handleToggleBookmark = async () => {
     await toggleBookmark(article);
@@ -94,6 +89,7 @@ export const NewsCard: React.FC<NewsCardProps> = ({
         >
           {/* Theme-Adaptive Ambient Blur Background for Width/Height Filling */}
           <Image
+            key={`ambient-${article.id}-${imageUri}`}
             source={{ uri: imageUri }}
             style={styles.ambientBlurImage}
             contentFit="cover"
@@ -111,14 +107,14 @@ export const NewsCard: React.FC<NewsCardProps> = ({
 
           {/* Uncropped Full Foreground Image */}
           <Image
+            key={`main-${article.id}-${imageUri}`}
             source={{ uri: imageUri }}
             style={styles.image}
             contentFit="contain"
-            transition={200}
             cachePolicy="memory-disk"
             onError={() => {
-              if (imageUri !== dynamicFallback) {
-                setImageUri(dynamicFallback);
+              if (!hasLoadError) {
+                setHasLoadError(true);
               }
             }}
           />

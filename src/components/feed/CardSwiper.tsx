@@ -58,6 +58,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
 
   const isAnimatingRef = useRef<boolean>(false);
   const panY = useRef(new Animated.Value(0)).current;
+  const activeOpacity = useRef(new Animated.Value(1)).current;
 
   // Window dimension listener for screen rotations / resizes
   useEffect(() => {
@@ -113,8 +114,9 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
   useEffect(() => {
     panY.stopAnimation();
     panY.setValue(0);
+    activeOpacity.setValue(1);
     isAnimatingRef.current = false;
-  }, [category, currentIndex, panY]);
+  }, [category, currentIndex, panY, activeOpacity]);
 
   // Capture container height dynamically
   const handleLayout = (e: LayoutChangeEvent) => {
@@ -140,11 +142,11 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
       easing: Easing.out(Easing.quad),
       useNativeDriver: Platform.OS !== 'web',
     }).start(() => {
+      activeOpacity.setValue(0);
       panY.setValue(0);
       setCurrentIndex(curr + 1);
-      isAnimatingRef.current = false;
     });
-  }, [getCardHeight, panY, setCurrentIndex]);
+  }, [getCardHeight, panY, activeOpacity, setCurrentIndex]);
 
   // Programmatic navigation to previous card
   const goToPrevCard = useCallback(() => {
@@ -165,11 +167,11 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
       easing: Easing.out(Easing.quad),
       useNativeDriver: Platform.OS !== 'web',
     }).start(() => {
+      activeOpacity.setValue(0);
       panY.setValue(0);
       setCurrentIndex(curr - 1);
-      isAnimatingRef.current = false;
     });
-  }, [getCardHeight, panY, setCurrentIndex, refreshFeed]);
+  }, [getCardHeight, panY, activeOpacity, setCurrentIndex, refreshFeed]);
 
   // Web desktop mouse wheel and arrow key shortcuts
   useEffect(() => {
@@ -254,9 +256,9 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
             easing: Easing.out(Easing.quad),
             useNativeDriver: Platform.OS !== 'web',
           }).start(() => {
+            activeOpacity.setValue(0);
             panY.setValue(0);
             setCurrentIndex(curr + 1);
-            isAnimatingRef.current = false;
           });
         } else if (isDownSwipe && curr > 0) {
           // Swipe down: Active card slides down, previous card underneath scales up
@@ -267,9 +269,9 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
             easing: Easing.out(Easing.quad),
             useNativeDriver: Platform.OS !== 'web',
           }).start(() => {
+            activeOpacity.setValue(0);
             panY.setValue(0);
             setCurrentIndex(curr - 1);
-            isAnimatingRef.current = false;
           });
         } else if (isDownSwipe && curr === 0) {
           // Pull-down at top card: Refresh trigger
@@ -454,6 +456,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
             pointerEvents="none"
           >
             <NewsCard
+              key={nextArticle.id}
               article={nextArticle}
               cardHeight={cardRenderHeight}
               onOpenFullRoast={onOpenFullRoast}
@@ -487,6 +490,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
             pointerEvents="none"
           >
             <NewsCard
+              key={prevArticle.id}
               article={prevArticle}
               cardHeight={cardRenderHeight}
               onOpenFullRoast={onOpenFullRoast}
@@ -507,16 +511,19 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
 
         {/* LAYER 2: ACTIVE CARD (ALWAYS ON TOP at zIndex: 10) */}
         <Animated.View
+          key={`active-layer-${currentArticle.id}`}
           style={[
             styles.cardLayer,
             {
               height: cardRenderHeight,
               zIndex: 10,
+              opacity: activeOpacity,
               transform: [{ translateY: activeCardTranslateY }],
             },
           ]}
         >
           <NewsCard
+            key={currentArticle.id}
             article={currentArticle}
             cardHeight={cardRenderHeight}
             onOpenFullRoast={onOpenFullRoast}
