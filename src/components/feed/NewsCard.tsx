@@ -42,6 +42,10 @@ export const NewsCard: React.FC<NewsCardProps> = ({
   const [hasLoadError, setHasLoadError] = useState<boolean>(false);
   const imageUri = (isValidUrl && !hasLoadError) ? article.image_url : dynamicFallback;
 
+  useEffect(() => {
+    setHasLoadError(false);
+  }, [article.id, article.image_url]);
+
   const handleToggleBookmark = async () => {
     await toggleBookmark(article);
   };
@@ -84,30 +88,11 @@ export const NewsCard: React.FC<NewsCardProps> = ({
           }}
           style={[
             styles.imageContainer,
-            { backgroundColor: isDark ? '#0B0E17' : '#F1F5F9' },
+            { backgroundColor: isDark ? '#080B12' : '#F1F5F9' },
           ]}
         >
-          {/* Theme-Adaptive Ambient Blur Background for Width/Height Filling */}
+          {/* Uncropped Full Foreground Image with Memory-Disk Cache Policy */}
           <Image
-            key={`ambient-${article.id}-${imageUri}`}
-            source={{ uri: imageUri }}
-            style={styles.ambientBlurImage}
-            contentFit="cover"
-            blurRadius={Platform.OS === 'android' ? 16 : 26}
-            cachePolicy="memory-disk"
-          />
-          <View
-            style={[
-              StyleSheet.absoluteFillObject,
-              {
-                backgroundColor: isDark ? 'rgba(11, 14, 23, 0.52)' : 'rgba(241, 245, 249, 0.55)',
-              },
-            ]}
-          />
-
-          {/* Uncropped Full Foreground Image */}
-          <Image
-            key={`main-${article.id}-${imageUri}`}
             source={{ uri: imageUri }}
             style={styles.image}
             contentFit="contain"
@@ -263,10 +248,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  ambientBlurImage: {
-    ...StyleSheet.absoluteFillObject,
-    transform: [{ scale: 1.15 }],
   },
   image: {
     width: '100%',

@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { RotateCcw } from 'lucide-react-native';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -58,7 +58,6 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
 
   const isAnimatingRef = useRef<boolean>(false);
   const panY = useRef(new Animated.Value(0)).current;
-  const activeOpacity = useRef(new Animated.Value(1)).current;
 
   // Window dimension listener for screen rotations / resizes
   useEffect(() => {
@@ -110,13 +109,12 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     }
   }, [currentIndex, articles]);
 
-  // Reset animation position when index or category changes
-  useEffect(() => {
+  // Reset animation position synchronously before paint whenever index or category changes
+  useLayoutEffect(() => {
     panY.stopAnimation();
     panY.setValue(0);
-    activeOpacity.setValue(1);
     isAnimatingRef.current = false;
-  }, [category, currentIndex, panY, activeOpacity]);
+  }, [category, currentIndex, panY]);
 
   // Capture container height dynamically
   const handleLayout = (e: LayoutChangeEvent) => {
@@ -142,11 +140,9 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
       easing: Easing.out(Easing.quad),
       useNativeDriver: Platform.OS !== 'web',
     }).start(() => {
-      activeOpacity.setValue(0);
-      panY.setValue(0);
       setCurrentIndex(curr + 1);
     });
-  }, [getCardHeight, panY, activeOpacity, setCurrentIndex]);
+  }, [getCardHeight, panY, setCurrentIndex]);
 
   // Programmatic navigation to previous card
   const goToPrevCard = useCallback(() => {
@@ -167,11 +163,9 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
       easing: Easing.out(Easing.quad),
       useNativeDriver: Platform.OS !== 'web',
     }).start(() => {
-      activeOpacity.setValue(0);
-      panY.setValue(0);
       setCurrentIndex(curr - 1);
     });
-  }, [getCardHeight, panY, activeOpacity, setCurrentIndex, refreshFeed]);
+  }, [getCardHeight, panY, setCurrentIndex, refreshFeed]);
 
   // Web desktop mouse wheel and arrow key shortcuts
   useEffect(() => {
@@ -256,8 +250,6 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
             easing: Easing.out(Easing.quad),
             useNativeDriver: Platform.OS !== 'web',
           }).start(() => {
-            activeOpacity.setValue(0);
-            panY.setValue(0);
             setCurrentIndex(curr + 1);
           });
         } else if (isDownSwipe && curr > 0) {
@@ -269,8 +261,6 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
             easing: Easing.out(Easing.quad),
             useNativeDriver: Platform.OS !== 'web',
           }).start(() => {
-            activeOpacity.setValue(0);
-            panY.setValue(0);
             setCurrentIndex(curr - 1);
           });
         } else if (isDownSwipe && curr === 0) {
@@ -324,9 +314,24 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
   }
 
   const height = getCardHeight();
+  const cardRenderHeight = containerHeight > 60 ? containerHeight : height;
+
   const currentArticle = articles[currentIndex] || articles[0];
   const nextArticle = currentIndex < articles.length - 1 ? articles[currentIndex + 1] : null;
   const prevArticle = currentIndex > 0 ? articles[currentIndex - 1] : null;
+
+  const activeSlot = currentIndex % 3;
+  const nextSlot = (currentIndex + 1) % 3;
+  const prevSlot = (currentIndex - 1 + 3) % 3;
+
+  const getSlotArticle = (slotIndex: number): Article | null => {
+    if (slotIndex === activeSlot) return currentArticle;
+    if (slotIndex === nextSlot) return nextArticle;
+    if (slotIndex === prevSlot) return prevArticle;
+    return null;
+  };
+
+  const orderedSlots = [prevSlot, nextSlot, activeSlot];
 
   // Deck Layer Transformations:
   // 1. Next Card Underneath: scales from 0.94 up to 1.0, translates Y from 14px to 0px
@@ -400,8 +405,6 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     extrapolate: 'clamp',
   });
 
-  const cardRenderHeight = containerHeight > 60 ? containerHeight : height;
-
   return (
     <View
       style={[styles.container, { backgroundColor: colors.background }]}
@@ -441,96 +444,66 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
           </Animated.View>
         )}
 
-        {/* LAYER 1A: NEXT CARD (Underneath active card at zIndex: 4) */}
-        {nextArticle && (
-          <Animated.View
-            style={[
-              styles.cardLayer,
-              {
-                height: cardRenderHeight,
-                zIndex: 4,
-                opacity: nextCardOpacity,
-                transform: [{ translateY: nextCardTranslateY }, { scale: nextCardScale }],
-              },
-            ]}
-            pointerEvents="none"
-          >
-            <NewsCard
-              key={nextArticle.id}
-              article={nextArticle}
-              cardHeight={cardRenderHeight}
-              onOpenFullRoast={onOpenFullRoast}
-              onOpenSourceLink={onOpenSourceLink}
-              onOpenImageViewer={onOpenImageViewer}
-            />
+        {/* PERSISTENT 3-SLOT DECK: Pre-mounts incoming cards so images never blink across slides */}
+        {orderedSlots.map((slotIndex) => {
+          const article = getSlotArticle(slotIndex);
+          if (!article) return null;
+
+          const isCurrent = slotIndex === activeSlot;
+          const isNext = slotIndex === nextSlot;
+          const isPrev = slotIndex === prevSlot;
+
+          const layerTransform = isCurrent
+            ? [{ translateY: activeCardTranslateY }]
+            : isNext
+            ? [{ translateY: nextCardTranslateY }, { scale: nextCardScale }]
+            : [{ translateY: prevCardTranslateY }, { scale: prevCardScale }];
+
+          const layerOpacity = isCurrent
+            ? 1
+            : isNext
+            ? nextCardOpacity
+            : prevCardOpacity;
+
+          const layerZIndex = isCurrent ? 10 : isNext ? 4 : 3;
+          const dimmer = isNext ? nextCardDimmer : isPrev ? prevCardDimmer : null;
+
+          return (
             <Animated.View
+              key={`deck-slot-${slotIndex}`}
               style={[
-                styles.depthVeil,
+                styles.cardLayer,
                 {
-                  opacity: nextCardDimmer,
-                  backgroundColor: isDark ? '#000000' : '#475569',
+                  height: cardRenderHeight,
+                  zIndex: layerZIndex,
+                  opacity: layerOpacity,
+                  transform: layerTransform,
                 },
               ]}
-            />
-          </Animated.View>
-        )}
-
-        {/* LAYER 1B: PREVIOUS CARD (Underneath active card at zIndex: 3) */}
-        {prevArticle && (
-          <Animated.View
-            style={[
-              styles.cardLayer,
-              {
-                height: cardRenderHeight,
-                zIndex: 3,
-                opacity: prevCardOpacity,
-                transform: [{ translateY: prevCardTranslateY }, { scale: prevCardScale }],
-              },
-            ]}
-            pointerEvents="none"
-          >
-            <NewsCard
-              key={prevArticle.id}
-              article={prevArticle}
-              cardHeight={cardRenderHeight}
-              onOpenFullRoast={onOpenFullRoast}
-              onOpenSourceLink={onOpenSourceLink}
-              onOpenImageViewer={onOpenImageViewer}
-            />
-            <Animated.View
-              style={[
-                styles.depthVeil,
-                {
-                  opacity: prevCardDimmer,
-                  backgroundColor: isDark ? '#000000' : '#475569',
-                },
-              ]}
-            />
-          </Animated.View>
-        )}
-
-        {/* LAYER 2: ACTIVE CARD (ALWAYS ON TOP at zIndex: 10) */}
-        <Animated.View
-          key={`active-layer-${currentArticle.id}`}
-          style={[
-            styles.cardLayer,
-            {
-              height: cardRenderHeight,
-              zIndex: 10,
-              opacity: activeOpacity,
-              transform: [{ translateY: activeCardTranslateY }],
-            },
-          ]}
-        >
-          <NewsCard
-            key={currentArticle.id}
-            article={currentArticle}
-            cardHeight={cardRenderHeight}
-            onOpenFullRoast={onOpenFullRoast}
-            onOpenSourceLink={onOpenSourceLink}
-            onOpenImageViewer={onOpenImageViewer}
-          />
-        </Animated.View>
+              pointerEvents={isCurrent ? 'auto' : 'none'}
+            >
+              <NewsCard
+                key={article.id}
+                article={article}
+                cardHeight={cardRenderHeight}
+                onOpenFullRoast={onOpenFullRoast}
+                onOpenSourceLink={onOpenSourceLink}
+                onOpenImageViewer={onOpenImageViewer}
+              />
+              {dimmer && (
+                <Animated.View
+                  style={[
+                    styles.depthVeil,
+                    {
+                      opacity: dimmer,
+                      backgroundColor: isDark ? '#000000' : '#475569',
+                    },
+                  ]}
+                />
+              )}
+            </Animated.View>
+          );
+        })}
       </View>
     </View>
   );
