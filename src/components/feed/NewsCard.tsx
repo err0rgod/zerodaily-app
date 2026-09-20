@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Bookmark, ChevronRight, ExternalLink, Flame, Globe, Share2 } from 'lucide-react-native';
+import { Bookmark, ExternalLink, Globe, Share2 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { CATEGORIES, DEFAULT_FALLBACK_IMAGE, getDynamicFallbackImage } from '../../constants/categories';
@@ -10,13 +10,13 @@ import { useTheme } from '../../store/themeStore';
 import { Article, CategoryKey } from '../../types';
 import { formatRelativeTime } from '../../utils/date';
 import { shareArticle } from '../../utils/share';
-import { extractDomain, getReadingEstimate } from '../../utils/url';
+import { extractDomain } from '../../utils/url';
 import { IconButton } from '../common/IconButton';
 
 interface NewsCardProps {
   article: Article;
   cardHeight: number;
-  onOpenFullRoast: (article: Article) => void;
+  onOpenFullRoast?: (article: Article) => void;
   onOpenSourceLink: (url: string) => void;
   onOpenImageViewer?: (imageUri: string, heading: string, category: CategoryKey) => void;
 }
@@ -55,7 +55,6 @@ export const NewsCard: React.FC<NewsCardProps> = ({
   };
 
   const domain = extractDomain(article.link);
-  const readingEstimate = getReadingEstimate(article.shortSummary);
   const relativeTime = formatRelativeTime(article.published_at);
 
   const scrimColors = isDark
@@ -117,8 +116,6 @@ export const NewsCard: React.FC<NewsCardProps> = ({
             </View>
 
             <View style={styles.metaChip}>
-              <Text style={styles.metaChipText}>{readingEstimate}</Text>
-              <Text style={styles.metaChipDot}>•</Text>
               <Text style={styles.metaChipText}>{relativeTime}</Text>
             </View>
           </View>
@@ -142,27 +139,6 @@ export const NewsCard: React.FC<NewsCardProps> = ({
               {article.shortSummary}
             </Text>
           </View>
-
-          {/* Bespoke "Read Full Roast" Editorial Callout */}
-          <TouchableOpacity
-            activeOpacity={0.75}
-            onPress={() => onOpenFullRoast(article)}
-            style={[
-              styles.fullRoastTrigger,
-              {
-                backgroundColor: colors.warningSoft,
-                borderColor: isDark ? 'rgba(245, 158, 11, 0.28)' : 'rgba(217, 119, 6, 0.25)',
-              },
-            ]}
-          >
-            <View style={styles.roastLeft}>
-              <Flame size={15} color={colors.warning} />
-              <Text style={[styles.fullRoastText, { color: colors.warning }]}>
-                Full Satirical Roast
-              </Text>
-            </View>
-            <ChevronRight size={14} color={colors.warning} />
-          </TouchableOpacity>
         </View>
 
         {/* 3. Refined Footer Actions Bar */}
@@ -298,11 +274,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
   },
-  metaChipDot: {
-    color: '#64748B',
-    fontSize: 9,
-    marginHorizontal: 3,
-  },
   bodyContainer: {
     flex: 1,
     paddingHorizontal: 16,
@@ -314,37 +285,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   heading: {
-    fontSize: 19.5,
+    fontSize: 21.5,
     fontWeight: '800',
-    lineHeight: 26,
-    marginBottom: 8,
+    lineHeight: 28,
+    marginBottom: 10,
     letterSpacing: -0.35,
   },
   summary: {
-    fontSize: 14,
-    lineHeight: 21.5,
-    letterSpacing: 0.1,
-  },
-  fullRoastTrigger: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    alignSelf: 'stretch',
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
-    marginTop: 8,
-  },
-  roastLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-  },
-  fullRoastText: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.2,
+    fontSize: 15.5,
+    lineHeight: 23.5,
+    letterSpacing: 0.15,
   },
   footerContainer: {
     flexDirection: 'row',
