@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
-import { AlertCircle, Bell, Moon, Settings, Smartphone, Sun, Trash2, X, Zap } from 'lucide-react-native';
-import React, { useState } from 'react';
+import { AlertCircle, Bell, Check, Copy, Moon, RefreshCw, Settings, Smartphone, Sun, Trash2, X, Zap } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -34,6 +35,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
   const [isSendingTest, setIsSendingTest] = useState<boolean>(false);
   const [fcmToken, setFcmToken] = useState<string | null>(null);
   const [isCheckingFcm, setIsCheckingFcm] = useState<boolean>(false);
+  const [hasCopiedToken, setHasCopiedToken] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (visible && !fcmToken) {
+      registerForPushNotificationsAsync().then((t) => {
+        if (t) setFcmToken(t);
+      }).catch(() => {});
+    }
+  }, [visible, fcmToken]);
+
+  const handleCopyFcmToken = async () => {
+    if (!fcmToken) {
+      await handleCheckFcmDiagnostics();
+      return;
+    }
+
+    await Clipboard.setStringAsync(fcmToken);
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    }
+    setHasCopiedToken(true);
+    setTimeout(() => setHasCopiedToken(false), 2500);
+  };
 
   const handleClearCache = async () => {
     Alert.alert(
@@ -263,34 +287,83 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
               </View>
             </TouchableOpacity>
 
-            {/* FCM Token Diagnostics */}
-            <TouchableOpacity
-              activeOpacity={0.75}
-              onPress={handleCheckFcmDiagnostics}
-              disabled={isCheckingFcm}
-              style={[
-                styles.actionItem,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  marginTop: 8,
-                },
-              ]}
-            >
-              {isCheckingFcm ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <Smartphone size={18} color={colors.primary} />
-              )}
-              <View style={styles.prefTextCol}>
-                <Text style={[styles.prefTitle, { color: colors.textPrimary }]}>FCM Device Push Token</Text>
-                <Text style={[styles.prefSub, { color: colors.textMuted }]}>
-                  {fcmToken
-                    ? `${fcmToken.slice(0, 26)}... (Tap to view full token)`
-                    : 'Tap to check Firebase connection & view token'}
+            {/* FCM Token Diagnostics & Device Token Display Card */}
+            <View style={[styles.tokenCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={styles.tokenCardHeader}>
+                <View style={styles.tokenStatusRow}>
+                  <View
+                    style={[
+                      styles.statusDot,
+                      { backgroundColor: fcmToken ? colors.primary : isCheckingFcm ? colors.warning : colors.textMuted },
+                    ]}
+                  />
+                  <Text style={[styles.tokenStatusText, { color: colors.textPrimary }]}>
+                    {fcmToken ? 'Connected to Firebase' : isCheckingFcm ? 'Querying Token...' : 'Registration Pending'}
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={handleCheckFcmDiagnostics}
+                  disabled={isCheckingFcm}
+                  style={[styles.refreshPill, { borderColor: colors.border, backgroundColor: colors.background }]}
+                >
+                  {isCheckingFcm ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <>
+                      <RefreshCw size={12} color={colors.textSecondary} />
+                      <Text style={[styles.refreshPillText, { color: colors.textSecondary }]}>Refresh</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {/* Monospace Token Box */}
+              <View style={[styles.tokenBox, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                <Text
+                  selectable={true}
+                  style={[styles.tokenValueText, { color: fcmToken ? colors.textPrimary : colors.textMuted }]}
+                  numberOfLines={3}
+                >
+                  {fcmToken || 'Tap "Refresh" to query native FCM push token from Google Play Services.'}
                 </Text>
               </View>
-            </TouchableOpacity>
+
+              {/* Action Buttons: Copy Token */}
+              <View style={styles.tokenActionRow}>
+                <TouchableOpacity
+                  activeOpacity={0.75}
+                  onPress={handleCopyFcmToken}
+                  disabled={isCheckingFcm}
+                  style={[
+                    styles.copyTokenBtn,
+                    {
+                      backgroundColor: hasCopiedToken ? colors.primary : `${colors.primary}18`,
+                      borderColor: colors.primary,
+                    },
+                  ]}
+                >
+                  {hasCopiedToken ? (
+                    <Check size={15} color="#FFFFFF" />
+                  ) : (
+                    <Copy size={15} color={colors.primary} />
+                  )}
+                  <Text
+                    style={[
+                      styles.copyTokenBtnText,
+                      { color: hasCopiedToken ? '#FFFFFF' : colors.primary },
+                    ]}
+                  >
+                    {hasCopiedToken ? 'Copied Token to Clipboard!' : 'Copy Device Push Token'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={[styles.tokenHelperText, { color: colors.textMuted }]}>
+                Paste this token into Firebase Console &gt; Cloud Messaging &gt; &quot;Send test message&quot; to test instant 2-second push delivery to this device.
+              </Text>
+            </View>
 
             {/* Section: Storage & Maintenance */}
             <Text style={[styles.sectionHeader, { color: colors.textMuted, marginTop: 24 }]}>
@@ -451,5 +524,77 @@ const styles = StyleSheet.create({
   },
   aboutText: {
     fontSize: 11.5,
+  },
+  tokenCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 14,
+    marginTop: 4,
+    gap: 12,
+  },
+  tokenCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  tokenStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  tokenStatusText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  refreshPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 9999,
+    borderWidth: 1,
+  },
+  refreshPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  tokenBox: {
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 10,
+  },
+  tokenValueText: {
+    fontSize: 11,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    lineHeight: 16,
+  },
+  tokenActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  copyTokenBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    flex: 1,
+  },
+  copyTokenBtnText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
+  tokenHelperText: {
+    fontSize: 11,
+    lineHeight: 16,
   },
 });
