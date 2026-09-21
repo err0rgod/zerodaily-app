@@ -25,6 +25,7 @@ import {
   View,
 } from 'react-native';
 import { fetchArticleById } from '../../api/client';
+import { MOCK_ARTICLES } from '../../api/mockData';
 import { CATEGORIES, CATEGORY_LIST, getDynamicFallbackImage } from '../../constants/categories';
 import { scheduleTestBreakingAlert } from '../../services/notificationService';
 import { useFeedStore } from '../../store/feedStore';
@@ -75,11 +76,40 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
       Haptics.selectionAsync().catch(() => {});
     }
     await markAsRead(item.article_id);
-    const article = await fetchArticleById(item.article_id);
-    if (article) {
-      setArticleDirectly(article);
-      onClose();
+
+    // 1. Immediate in-memory / local feed / mock search
+    const { articles } = useFeedStore.getState();
+    let article =
+      articles.find((a) => a.id === item.article_id) ||
+      MOCK_ARTICLES.find((a) => a.id === item.article_id);
+
+    // 2. Immediate resilient fallback directly from the notification item
+    if (!article) {
+      article = {
+        id: item.article_id,
+        category: item.category,
+        heading: item.heading,
+        shortSummary: item.push_punchline || item.heading,
+        fullSummary: item.push_punchline || item.heading,
+        published_at: item.published_at || new Date().toISOString(),
+        link: item.article_id.startsWith('http') ? item.article_id : 'https://zerodaily.in',
+        image_url: item.image_url || '',
+        is_breaking: true,
+      };
     }
+
+    // 3. Immediately focus article on feed and dismiss the modal (instant 0ms response)
+    setArticleDirectly(article);
+    onClose();
+
+    // 4. Background network fetch for extended content (if available) without blocking UI
+    fetchArticleById(item.article_id)
+      .then((fresh) => {
+        if (fresh) {
+          setArticleDirectly(fresh);
+        }
+      })
+      .catch(() => {});
   };
 
   const handleDismiss = async (articleId: string) => {

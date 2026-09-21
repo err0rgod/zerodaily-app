@@ -22,9 +22,6 @@ import { useTheme, useThemeStore } from './src/store/themeStore';
 import { Article, CategoryKey } from './src/types';
 
 export default function App() {
-  // Push notification channel & topic initialization
-  useNotifications();
-
   // Active theme
   const { colors, isDark } = useTheme();
   const initTheme = useThemeStore((s) => s.initTheme);
@@ -43,6 +40,20 @@ export default function App() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isBookmarksOpen, setIsBookmarksOpen] = useState<boolean>(false);
+
+  // Push notification channel, background listener & deep-link routing
+  useNotifications({
+    onArticleSelected: () => {
+      // Dismiss all modal overlays so the user lands straight on the active story card
+      setIsNotificationsOpen(false);
+      setIsSearchOpen(false);
+      setIsSettingsOpen(false);
+      setIsBookmarksOpen(false);
+      setIsRoastModalOpen(false);
+      setViewerImage(null);
+      setActiveTab('home');
+    },
+  });
 
   useEffect(() => {
     initTheme();

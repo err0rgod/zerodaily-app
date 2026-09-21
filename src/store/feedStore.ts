@@ -203,17 +203,18 @@ export const useFeedStore = create<FeedState>((set, get) => ({
   },
 
   setArticleDirectly: (article: Article) => {
-    const { articles } = get();
-    const existingIndex = articles.findIndex((a) => a.id === article.id);
+    const { articles, category } = get();
+    const targetCategory =
+      category === 'all' || category === article.category
+        ? category
+        : article.category || 'all';
 
-    if (existingIndex >= 0) {
-      set({ currentIndex: existingIndex });
-    } else {
-      // Prepend to top and focus
-      set({
-        articles: [article, ...articles],
-        currentIndex: 0,
-      });
-    }
+    // Move or insert target article at index 0 so it is immediately active on screen
+    const filtered = articles.filter((a) => a.id !== article.id);
+    set({
+      category: targetCategory,
+      articles: [article, ...filtered],
+      currentIndex: 0,
+    });
   },
 }));
