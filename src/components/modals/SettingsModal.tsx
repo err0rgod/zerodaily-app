@@ -16,7 +16,10 @@ import {
   View,
 } from 'react-native';
 import { CATEGORY_LIST } from '../../constants/categories';
-import { scheduleTestBreakingAlert } from '../../services/notificationService';
+import {
+  registerForPushNotificationsAsync,
+  scheduleTestBreakingAlert,
+} from '../../services/notificationService';
 import { useSettingsStore } from '../../store/settingsStore';
 import { ThemeMode, useTheme } from '../../store/themeStore';
 
@@ -29,6 +32,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
   const { preferences, toggleCategoryNotification, toggleBreakingAll } = useSettingsStore();
   const { colors, themeMode, setThemeMode } = useTheme();
   const [isSendingTest, setIsSendingTest] = useState<boolean>(false);
+  const [fcmToken, setFcmToken] = useState<string | null>(null);
+  const [isCheckingFcm, setIsCheckingFcm] = useState<boolean>(false);
 
   const handleClearCache = async () => {
     Alert.alert(
@@ -71,6 +76,40 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
       Alert.alert('Error', 'Unable to trigger test notification. Check app permissions.');
     } finally {
       setIsSendingTest(false);
+    }
+  };
+
+  const handleCheckFcmDiagnostics = async () => {
+    if (isCheckingFcm) return;
+    setIsCheckingFcm(true);
+    if (Platform.OS !== 'web') {
+      Haptics.selectionAsync().catch(() => {});
+    }
+
+    try {
+      const token = await registerForPushNotificationsAsync();
+      if (token) {
+        setFcmToken(token);
+        Alert.alert(
+          'FCM Device Token',
+          `Your device is registered with Firebase!\n\nToken:\n${token}\n\n(Use this token in Firebase Console -> "Send test message")`,
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert(
+          'FCM Registration Check',
+          'Could not retrieve an FCM token. Please verify that Notification permissions are allowed in your Android phone settings.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (err: any) {
+      Alert.alert(
+        'FCM Registration Error',
+        `Error communicating with Firebase Cloud Messaging:\n${err?.message || String(err)}`,
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsCheckingFcm(false);
     }
   };
 
@@ -220,6 +259,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                 <Text style={[styles.prefTitle, { color: colors.primary }]}>Send Test Breaking Alert</Text>
                 <Text style={[styles.prefSub, { color: colors.textMuted }]}>
                   Triggers an instant 2-second alert banner with sound & vibration
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* FCM Token Diagnostics */}
+            <TouchableOpacity
+              activeOpacity={0.75}
+              onPress={handleCheckFcmDiagnostics}
+              disabled={isCheckingFcm}
+              style={[
+                styles.actionItem,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  marginTop: 8,
+                },
+              ]}
+            >
+              {isCheckingFcm ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Smartphone size={18} color={colors.primary} />
+              )}
+              <View style={styles.prefTextCol}>
+                <Text style={[styles.prefTitle, { color: colors.textPrimary }]}>FCM Device Push Token</Text>
+                <Text style={[styles.prefSub, { color: colors.textMuted }]}>
+                  {fcmToken
+                    ? `${fcmToken.slice(0, 26)}... (Tap to view full token)`
+                    : 'Tap to check Firebase connection & view token'}
                 </Text>
               </View>
             </TouchableOpacity>
