@@ -9,7 +9,7 @@ interface CategoryPillsProps {
   onSelectCategory: (category: CategoryKey) => void;
 }
 
-export const CategoryPills: React.FC<CategoryPillsProps> = ({
+export const CategoryPills: React.FC<CategoryPillsProps> = React.memo(({
   activeCategory,
   onSelectCategory,
 }) => {
@@ -57,7 +57,7 @@ export const CategoryPills: React.FC<CategoryPillsProps> = ({
       </ScrollView>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   wrapper: {

@@ -212,13 +212,10 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
 
       onMoveShouldSetPanResponder: (_, gesture) => {
         if (isAnimatingRef.current) return false;
-        // Permissive diagonal tolerance so thumbs don't get rejected on phones
-        return Math.abs(gesture.dy) > 6 && Math.abs(gesture.dy) > Math.abs(gesture.dx) * 0.7;
+        // Only trigger vertical card swipe when intent is clear (> 12px vertical displacement)
+        return Math.abs(gesture.dy) > 12 && Math.abs(gesture.dy) > Math.abs(gesture.dx) * 0.8;
       },
-      onMoveShouldSetPanResponderCapture: (_, gesture) => {
-        if (isAnimatingRef.current) return false;
-        return Math.abs(gesture.dy) > 6 && Math.abs(gesture.dy) > Math.abs(gesture.dx) * 0.7;
-      },
+      onMoveShouldSetPanResponderCapture: () => false,
 
       onPanResponderGrant: () => {
         panY.stopAnimation();

@@ -21,7 +21,7 @@ interface NewsCardProps {
   onOpenImageViewer?: (imageUri: string, heading: string, category: CategoryKey) => void;
 }
 
-export const NewsCard: React.FC<NewsCardProps> = ({
+export const NewsCard: React.FC<NewsCardProps> = React.memo(({
   article,
   cardHeight,
   onOpenFullRoast,
@@ -29,8 +29,8 @@ export const NewsCard: React.FC<NewsCardProps> = ({
   onOpenImageViewer,
 }) => {
   const { colors, isDark } = useTheme();
-  const { isBookmarked, toggleBookmark } = useBookmarkStore();
-  const bookmarked = isBookmarked(article.id);
+  const bookmarked = useBookmarkStore(React.useCallback((s) => s.bookmarks.some((b) => b.id === article.id), [article.id]));
+  const toggleBookmark = useBookmarkStore((s) => s.toggleBookmark);
 
   const { fontScale } = useWindowDimensions();
   const isLargeFont = fontScale > 1.15;
@@ -214,7 +214,7 @@ export const NewsCard: React.FC<NewsCardProps> = ({
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   pageWrapper: {

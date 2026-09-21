@@ -13,7 +13,7 @@ interface BottomNavProps {
   hasUnreadNotifications?: boolean;
 }
 
-export const BottomNav: React.FC<BottomNavProps> = ({
+export const BottomNav: React.FC<BottomNavProps> = React.memo(({
   activeTab = 'home',
   onTabPress,
   bookmarkCount = 0,
@@ -114,7 +114,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

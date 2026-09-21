@@ -29,18 +29,23 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
+let cachedFcmToken: string | null = null;
+
 export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }) => {
   const { preferences, toggleCategoryNotification, toggleBreakingAll } = useSettingsStore();
   const { colors, themeMode, setThemeMode } = useTheme();
   const [isSendingTest, setIsSendingTest] = useState<boolean>(false);
-  const [fcmToken, setFcmToken] = useState<string | null>(null);
+  const [fcmToken, setFcmToken] = useState<string | null>(cachedFcmToken);
   const [isCheckingFcm, setIsCheckingFcm] = useState<boolean>(false);
   const [hasCopiedToken, setHasCopiedToken] = useState<boolean>(false);
 
   useEffect(() => {
     if (visible && !fcmToken) {
       registerForPushNotificationsAsync().then((t) => {
-        if (t) setFcmToken(t);
+        if (t) {
+          cachedFcmToken = t;
+          setFcmToken(t);
+        }
       }).catch(() => {});
     }
   }, [visible, fcmToken]);
@@ -113,6 +118,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
     try {
       const token = await registerForPushNotificationsAsync();
       if (token) {
+        cachedFcmToken = token;
         setFcmToken(token);
         Alert.alert(
           'FCM Device Token',

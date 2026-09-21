@@ -24,20 +24,23 @@ interface UseNotificationsOptions {
  * 4. Periodic background check for breaking news alerts
  */
 export function useNotifications(options?: UseNotificationsOptions) {
-  const { setArticleDirectly } = useFeedStore();
-  const { initializePreferences, preferences } = useSettingsStore();
-  const { addIncomingNotification, markAsRead, loadNotifications } = useNotificationStore();
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
 
   const responseListener = useRef<Notifications.Subscription>();
   const receivedListener = useRef<Notifications.Subscription>();
   const lastAlertTimestampRef = useRef<string>(new Date().toISOString());
+  const isInitializedRef = useRef<boolean>(false);
 
   useEffect(() => {
-    // 1. Initialize settings & notifications
-    initializePreferences().catch(() => {});
-    loadNotifications().catch(() => {});
+    if (isInitializedRef.current) return;
+    isInitializedRef.current = true;
 
-    // 2. Setup channel & request remote push token
+    // 1. Initialize settings & notifications once on boot
+    useSettingsStore.getState().initializePreferences().catch(() => {});
+    useNotificationStore.getState().loadNotifications().catch(() => {});
+
+    // 2. Setup channel & request remote push token once on boot
     setupNotificationChannel().catch(() => {});
     registerForPushNotificationsAsync().catch(() => {});
 
@@ -61,7 +64,7 @@ export function useNotifications(options?: UseNotificationsOptions) {
               image_url: imageUrl,
               published_at: new Date().toISOString(),
             };
-            addIncomingNotification(incomingItem);
+            useNotificationStore.getState().addIncomingNotification(incomingItem);
           }
         } catch (err) {
           console.warn('[ZeroDaily Notifications] Failed to process incoming alert:', err);
@@ -80,10 +83,10 @@ export function useNotifications(options?: UseNotificationsOptions) {
 
         if (articleId) {
           console.log(`[ZeroDaily Notifications] Deep-linking to article: ${articleId}`);
-          await markAsRead(articleId);
+          await useNotificationStore.getState().markAsRead(articleId);
 
           // 1. Instant local feed or mock search
-          const { articles } = useFeedStore.getState();
+          const { articles, setArticleDirectly } = useFeedStore.getState();
           let article =
             articles.find((a) => a.id === articleId) ||
             MOCK_ARTICLES.find((a) => a.id === articleId);
@@ -111,13 +114,13 @@ export function useNotifications(options?: UseNotificationsOptions) {
 
           // 3. Immediately focus article and notify UI to close modals
           setArticleDirectly(article);
-          options?.onArticleSelected?.(article);
+          optionsRef.current?.onArticleSelected?.(article);
 
           // 4. Background fetch for any richer summary if available
           fetchArticleById(articleId)
             .then((fresh) => {
               if (fresh) {
-                setArticleDirectly(fresh);
+                useFeedStore.getState().setArticleDirectly(fresh);
               }
             })
             .catch(() => {});
@@ -156,11 +159,12 @@ export function useNotifications(options?: UseNotificationsOptions) {
             lastAlertTimestampRef.current = newest.published_at;
 
             // Check if user is interested in this category
-            const isCategoryActive = preferences[newest.category] ?? true;
-            const isBreakingAllActive = preferences.breaking_all ?? true;
+            const currentPrefs = useSettingsStore.getState().preferences;
+            const isCategoryActive = currentPrefs[newest.category] ?? true;
+            const isBreakingAllActive = currentPrefs.breaking_all ?? true;
 
             if (isCategoryActive || isBreakingAllActive) {
-              addIncomingNotification(newest);
+              useNotificationStore.getState().addIncomingNotification(newest);
             }
           }
         }
@@ -195,5 +199,5 @@ export function useNotifications(options?: UseNotificationsOptions) {
       appStateSub.remove();
       clearInterval(pollInterval);
     };
-  }, [setArticleDirectly, initializePreferences, loadNotifications, addIncomingNotification, markAsRead, preferences]);
+  }, []);
 }

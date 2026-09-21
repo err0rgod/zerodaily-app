@@ -26,10 +26,16 @@ export default function App() {
   const { colors, isDark } = useTheme();
   const initTheme = useThemeStore((s) => s.initTheme);
 
-  // Store access
-  const { category, setCategory, currentIndex, setCurrentIndex, refreshFeed } = useFeedStore();
-  const { bookmarks, loadBookmarks } = useBookmarkStore();
-  const { hasUnread } = useNotificationStore();
+  // Store access with granular selectors (eliminates root re-renders on swipe or article fetch)
+  const category = useFeedStore((s) => s.category);
+  const setCategory = useFeedStore((s) => s.setCategory);
+  const setCurrentIndex = useFeedStore((s) => s.setCurrentIndex);
+  const setArticleDirectly = useFeedStore((s) => s.setArticleDirectly);
+
+  const bookmarkCount = useBookmarkStore((s) => s.bookmarks.length);
+  const loadBookmarks = useBookmarkStore((s) => s.loadBookmarks);
+
+  const hasUnread = useNotificationStore((s) => s.hasUnread);
 
   // Modal & Navigation states
   const [activeTab, setActiveTab] = useState<BottomNavTab>('home');
@@ -41,18 +47,19 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isBookmarksOpen, setIsBookmarksOpen] = useState<boolean>(false);
 
+  const handleArticleSelectedFromNotification = React.useCallback(() => {
+    setIsNotificationsOpen(false);
+    setIsSearchOpen(false);
+    setIsSettingsOpen(false);
+    setIsBookmarksOpen(false);
+    setIsRoastModalOpen(false);
+    setViewerImage(null);
+    setActiveTab('home');
+  }, []);
+
   // Push notification channel, background listener & deep-link routing
   useNotifications({
-    onArticleSelected: () => {
-      // Dismiss all modal overlays so the user lands straight on the active story card
-      setIsNotificationsOpen(false);
-      setIsSearchOpen(false);
-      setIsSettingsOpen(false);
-      setIsBookmarksOpen(false);
-      setIsRoastModalOpen(false);
-      setViewerImage(null);
-      setActiveTab('home');
-    },
+    onArticleSelected: handleArticleSelectedFromNotification,
   });
 
   useEffect(() => {
@@ -60,20 +67,24 @@ export default function App() {
     loadBookmarks();
   }, [initTheme, loadBookmarks]);
 
-  const handleOpenFullRoast = (article: Article) => {
+  const handleOpenFullRoast = React.useCallback((article: Article) => {
     setSelectedRoastArticle(article);
     setIsRoastModalOpen(true);
-  };
+  }, []);
 
-  const handleOpenSource = async (url: string) => {
+  const handleOpenSource = React.useCallback(async (url: string) => {
     await openArticleSource(url);
-  };
+  }, []);
 
-  const handleCategorySelect = async (newCategory: CategoryKey) => {
+  const handleCategorySelect = React.useCallback(async (newCategory: CategoryKey) => {
     await setCategory(newCategory);
-  };
+  }, [setCategory]);
 
-  const handleTabPress = (tab: BottomNavTab) => {
+  const handleOpenImageViewer = React.useCallback((uri: string, heading: string, cat: CategoryKey) => {
+    setViewerImage({ uri, heading, category: cat });
+  }, []);
+
+  const handleTabPress = React.useCallback((tab: BottomNavTab) => {
     setActiveTab(tab);
     switch (tab) {
       case 'search':
@@ -92,7 +103,7 @@ export default function App() {
         setIsBookmarksOpen(true);
         break;
     }
-  };
+  }, [setCurrentIndex]);
 
   return (
     <ErrorBoundary>
@@ -115,14 +126,14 @@ export default function App() {
               <CardSwiper
                 onOpenFullRoast={handleOpenFullRoast}
                 onOpenSourceLink={handleOpenSource}
-                onOpenImageViewer={(uri, heading, cat) => setViewerImage({ uri, heading, category: cat })}
+                onOpenImageViewer={handleOpenImageViewer}
               />
 
               {/* 3. 5-Option Bottom Navigation Bar (Search, Notifications, Home, Settings, Saved) */}
               <BottomNav
                 activeTab={activeTab}
                 onTabPress={handleTabPress}
-                bookmarkCount={bookmarks.length}
+                bookmarkCount={bookmarkCount}
                 hasUnreadNotifications={hasUnread}
               />
             </View>
