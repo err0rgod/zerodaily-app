@@ -1,18 +1,17 @@
-import { Bell, Bookmark, Moon, Settings, Sun } from 'lucide-react-native';
+import { Bookmark, Moon, Settings, Sun } from 'lucide-react-native';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../store/themeStore';
 import { IconButton } from './IconButton';
 
 interface HeaderProps {
-  onOpenNotifications: () => void;
+  onOpenNotifications?: () => void;
   onOpenBookmarks: () => void;
   onOpenSettings: () => void;
   bookmarkCount?: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  onOpenNotifications,
   onOpenBookmarks,
   onOpenSettings,
   bookmarkCount = 0,
@@ -31,14 +30,6 @@ export const Header: React.FC<HeaderProps> = ({
         <IconButton
           icon={isDark ? <Sun size={17} color={colors.textPrimary} /> : <Moon size={17} color={colors.textPrimary} />}
           onPress={toggleTheme}
-          size={36}
-          style={styles.actionBtn}
-        />
-
-        {/* Notifications */}
-        <IconButton
-          icon={<Bell size={17} color={colors.textPrimary} />}
-          onPress={onOpenNotifications}
           size={36}
           style={styles.actionBtn}
         />

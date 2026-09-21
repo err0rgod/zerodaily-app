@@ -1,23 +1,21 @@
 import * as Haptics from 'expo-haptics';
-import { Bell, Bookmark, Home, Search, Settings } from 'lucide-react-native';
+import { Bookmark, Home, Settings } from 'lucide-react-native';
 import React from 'react';
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../../store/themeStore';
 
-export type BottomNavTab = 'search' | 'notifications' | 'home' | 'settings' | 'saved';
+export type BottomNavTab = 'home' | 'saved' | 'settings';
 
 interface BottomNavProps {
   activeTab?: BottomNavTab;
   onTabPress: (tab: BottomNavTab) => void;
   bookmarkCount?: number;
-  hasUnreadNotifications?: boolean;
 }
 
 export const BottomNav: React.FC<BottomNavProps> = React.memo(({
   activeTab = 'home',
   onTabPress,
   bookmarkCount = 0,
-  hasUnreadNotifications = false,
 }) => {
   const { colors, isDark } = useTheme();
 
@@ -30,27 +28,9 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
 
   const tabs: { key: BottomNavTab; label: string; icon: React.ReactNode; badge?: React.ReactNode }[] = [
     {
-      key: 'search',
-      label: 'Search',
-      icon: <Search size={20} color={activeTab === 'search' ? colors.primary : colors.textMuted} />,
-    },
-    {
-      key: 'notifications',
-      label: 'Notifications',
-      icon: <Bell size={20} color={activeTab === 'notifications' ? colors.primary : colors.textMuted} />,
-      badge: hasUnreadNotifications ? (
-        <View style={[styles.dotBadge, { backgroundColor: colors.danger }]} />
-      ) : null,
-    },
-    {
       key: 'home',
       label: 'Home',
       icon: <Home size={22} color={activeTab === 'home' ? colors.primary : colors.textMuted} />,
-    },
-    {
-      key: 'settings',
-      label: 'Settings',
-      icon: <Settings size={20} color={activeTab === 'settings' ? colors.primary : colors.textMuted} />,
     },
     {
       key: 'saved',
@@ -68,7 +48,13 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
         </View>
       ) : null,
     },
+    {
+      key: 'settings',
+      label: 'Settings',
+      icon: <Settings size={20} color={activeTab === 'settings' ? colors.primary : colors.textMuted} />,
+    },
   ];
+
 
   return (
     <View

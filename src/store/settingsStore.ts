@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
+import { subscribeToTopics, unsubscribeFromTopics } from '../api/client';
 import { CATEGORIES } from '../constants/categories';
+import { getCachedPushToken } from '../services/notificationService';
 import { CategoryKey, NotificationPreferences } from '../types';
 
 const SETTINGS_STORAGE_KEY = '@zerodaily_settings_prefs';
@@ -13,6 +15,7 @@ interface SettingsState {
   initializePreferences: () => Promise<void>;
   toggleCategoryNotification: (category: CategoryKey) => Promise<void>;
   toggleBreakingAll: () => Promise<void>;
+  setInitialCategories: (categories: CategoryKey[]) => Promise<void>;
 }
 
 const DEFAULT_PREFERENCES: NotificationPreferences = {
@@ -56,11 +59,17 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ preferences: updatedPrefs });
     await AsyncStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(updatedPrefs));
 
-    // FCM Topic Sync (Client-Side Topic Subscription)
+    // Synchronize subscription with backend
     const topic = CATEGORIES[category]?.fcmTopic;
     if (topic) {
-      // In native environment, this delegates to FirebaseMessaging.instance
-      console.log(`[ZeroDaily FCM] ${updatedValue ? 'Subscribing to' : 'Unsubscribing from'} topic: ${topic}`);
+      const token = await getCachedPushToken();
+      if (token) {
+        if (updatedValue) {
+          await subscribeToTopics(token, [topic]);
+        } else {
+          await unsubscribeFromTopics(token, [topic]);
+        }
+      }
     }
   },
 
@@ -75,6 +84,45 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ preferences: updatedPrefs });
     await AsyncStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(updatedPrefs));
 
-    console.log(`[ZeroDaily FCM] ${updatedValue ? 'Subscribed to' : 'Unsubscribed from'} topic: topic_breaking_all`);
+    const token = await getCachedPushToken();
+    if (token) {
+      if (updatedValue) {
+        await subscribeToTopics(token, ['topic_breaking_all']);
+      } else {
+        await unsubscribeFromTopics(token, ['topic_breaking_all']);
+      }
+    }
+  },
+
+  setInitialCategories: async (categories: CategoryKey[]) => {
+    const updatedPrefs: NotificationPreferences = {
+      ...DEFAULT_PREFERENCES,
+      breaking_all: true,
+      all: true,
+      cybersec: categories.includes('cybersec'),
+      ai: categories.includes('ai'),
+      programming: categories.includes('programming'),
+      robotics: categories.includes('robotics'),
+      defense_aerospace: categories.includes('defense_aerospace'),
+      hardware: categories.includes('hardware'),
+      finance: categories.includes('finance'),
+    };
+
+    set({ preferences: updatedPrefs });
+    await AsyncStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(updatedPrefs));
+
+    const topics: string[] = ['topic_breaking_all'];
+    for (const cat of categories) {
+      const topic = CATEGORIES[cat]?.fcmTopic;
+      if (topic && !topics.includes(topic)) {
+        topics.push(topic);
+      }
+    }
+
+    const token = await getCachedPushToken();
+    if (token) {
+      await subscribeToTopics(token, topics);
+    }
   },
 }));
+

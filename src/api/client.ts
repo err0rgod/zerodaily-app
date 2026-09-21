@@ -123,3 +123,42 @@ export async function fetchNotificationHistory(limit: number = 20): Promise<Noti
     };
   }
 }
+
+/**
+ * Subscribes a device registration token to FCM topics on the backend.
+ * Conforms to POST /api/v1/notifications/subscribe.
+ */
+export async function subscribeToTopics(token: string, topics: string[]): Promise<boolean> {
+  if (!token || !topics.length) return false;
+  try {
+    const response = await fetchWithTimeout(ENDPOINTS.NOTIFICATIONS_SUBSCRIBE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, topics }),
+    });
+    return response.ok;
+  } catch (error) {
+    console.warn('[ZeroDaily API] subscribeToTopics failed:', error);
+    return false;
+  }
+}
+
+/**
+ * Unsubscribes a device registration token from FCM topics on the backend.
+ * Conforms to POST /api/v1/notifications/unsubscribe.
+ */
+export async function unsubscribeFromTopics(token: string, topics: string[]): Promise<boolean> {
+  if (!token || !topics.length) return false;
+  try {
+    const response = await fetchWithTimeout(ENDPOINTS.NOTIFICATIONS_UNSUBSCRIBE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, topics }),
+    });
+    return response.ok;
+  } catch (error) {
+    console.warn('[ZeroDaily API] unsubscribeFromTopics failed:', error);
+    return false;
+  }
+}
+

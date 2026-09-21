@@ -8,16 +8,14 @@ import { ErrorBoundary } from './src/components/common/ErrorBoundary';
 import { CardSwiper } from './src/components/feed/CardSwiper';
 import { CategoryPills } from './src/components/feed/CategoryPills';
 import { BookmarksModal } from './src/components/modals/BookmarksModal';
+import { CategoryOnboardingModal } from './src/components/modals/CategoryOnboardingModal';
 import { FullRoastModal } from './src/components/modals/FullRoastModal';
 import { ImageViewerModal } from './src/components/modals/ImageViewerModal';
-import { NotificationModal } from './src/components/modals/NotificationModal';
-import { SearchModal } from './src/components/modals/SearchModal';
 import { SettingsModal } from './src/components/modals/SettingsModal';
 import { openArticleSource } from './src/components/webview/ArticleReader';
 import { useNotifications } from './src/hooks/useNotifications';
 import { useBookmarkStore } from './src/store/bookmarkStore';
 import { useFeedStore } from './src/store/feedStore';
-import { useNotificationStore } from './src/store/notificationStore';
 import { useTheme, useThemeStore } from './src/store/themeStore';
 import { Article, CategoryKey } from './src/types';
 
@@ -35,21 +33,15 @@ export default function App() {
   const bookmarkCount = useBookmarkStore((s) => s.bookmarks.length);
   const loadBookmarks = useBookmarkStore((s) => s.loadBookmarks);
 
-  const hasUnread = useNotificationStore((s) => s.hasUnread);
-
   // Modal & Navigation states
   const [activeTab, setActiveTab] = useState<BottomNavTab>('home');
   const [selectedRoastArticle, setSelectedRoastArticle] = useState<Article | null>(null);
   const [viewerImage, setViewerImage] = useState<{ uri: string; heading: string; category: CategoryKey } | null>(null);
   const [isRoastModalOpen, setIsRoastModalOpen] = useState<boolean>(false);
-  const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isBookmarksOpen, setIsBookmarksOpen] = useState<boolean>(false);
 
   const handleArticleSelectedFromNotification = React.useCallback(() => {
-    setIsNotificationsOpen(false);
-    setIsSearchOpen(false);
     setIsSettingsOpen(false);
     setIsBookmarksOpen(false);
     setIsRoastModalOpen(false);
@@ -87,12 +79,6 @@ export default function App() {
   const handleTabPress = React.useCallback((tab: BottomNavTab) => {
     setActiveTab(tab);
     switch (tab) {
-      case 'search':
-        setIsSearchOpen(true);
-        break;
-      case 'notifications':
-        setIsNotificationsOpen(true);
-        break;
       case 'home':
         setCurrentIndex(0);
         break;
@@ -129,12 +115,11 @@ export default function App() {
                 onOpenImageViewer={handleOpenImageViewer}
               />
 
-              {/* 3. 5-Option Bottom Navigation Bar (Search, Notifications, Home, Settings, Saved) */}
+              {/* 3. 3-Option Bottom Navigation Bar (Home, Saved, Settings) */}
               <BottomNav
                 activeTab={activeTab}
                 onTabPress={handleTabPress}
                 bookmarkCount={bookmarkCount}
-                hasUnreadNotifications={hasUnread}
               />
             </View>
 
@@ -146,26 +131,11 @@ export default function App() {
               category={viewerImage?.category}
               onClose={() => setViewerImage(null)}
             />
-            <SearchModal
-              visible={isSearchOpen}
-              onClose={() => {
-                setIsSearchOpen(false);
-                setActiveTab('home');
-              }}
-            />
 
             <FullRoastModal
               visible={isRoastModalOpen}
               article={selectedRoastArticle}
               onClose={() => setIsRoastModalOpen(false)}
-            />
-
-            <NotificationModal
-              visible={isNotificationsOpen}
-              onClose={() => {
-                setIsNotificationsOpen(false);
-                setActiveTab('home');
-              }}
             />
 
             <SettingsModal
@@ -183,6 +153,9 @@ export default function App() {
                 setActiveTab('home');
               }}
             />
+
+            {/* First-launch Category Subscription Onboarding (Prompted once after install) */}
+            <CategoryOnboardingModal />
           </SafeAreaView>
         </SafeAreaProvider>
       </GestureHandlerRootView>

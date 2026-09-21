@@ -1,9 +1,13 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import { subscribeToTopics } from '../api/client';
 import { CATEGORIES } from '../constants/categories';
 import { CategoryKey, NotificationItem } from '../types';
 
 export const BREAKING_CHANNEL_ID = 'zerodaily_breaking';
+const TOKEN_STORAGE_KEY = '@zerodaily_device_push_token';
+let inMemoryPushToken: string | null = null;
 
 // Ensure foreground notifications present alert, sound, and badge
 try {
@@ -78,6 +82,8 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
     // Attempt device push token first (native FCM on Android / APNs on iOS)
     const deviceToken = await Notifications.getDevicePushTokenAsync();
     if (deviceToken?.data) {
+      inMemoryPushToken = deviceToken.data;
+      await AsyncStorage.setItem(TOKEN_STORAGE_KEY, deviceToken.data).catch(() => {});
       console.log('[ZeroDaily NotificationService] Native Push Token:', deviceToken.data);
       return deviceToken.data;
     }
@@ -88,6 +94,8 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
   try {
     const expoToken = await Notifications.getExpoPushTokenAsync();
     if (expoToken?.data) {
+      inMemoryPushToken = expoToken.data;
+      await AsyncStorage.setItem(TOKEN_STORAGE_KEY, expoToken.data).catch(() => {});
       console.log('[ZeroDaily NotificationService] Expo Push Token:', expoToken.data);
       return expoToken.data;
     }
@@ -97,6 +105,22 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
 
   return null;
 }
+
+/**
+ * Returns the cached device push token if already retrieved, or fetches it.
+ */
+export async function getCachedPushToken(): Promise<string | null> {
+  if (inMemoryPushToken) return inMemoryPushToken;
+  try {
+    const stored = await AsyncStorage.getItem(TOKEN_STORAGE_KEY);
+    if (stored) {
+      inMemoryPushToken = stored;
+      return stored;
+    }
+  } catch {}
+  return registerForPushNotificationsAsync();
+}
+
 
 /**
  * Dispatches an instant local test breaking alert after 2 seconds.

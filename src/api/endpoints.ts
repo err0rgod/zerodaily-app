@@ -22,6 +22,13 @@ export const ENDPOINTS = {
   /** GET /api/v1/notifications/history?limit={limit} */
   NOTIFICATION_HISTORY: `${API_BASE_URL}/api/v1/notifications/history`,
 
+  /** POST /api/v1/notifications/subscribe */
+  NOTIFICATIONS_SUBSCRIBE: `${API_BASE_URL}/api/v1/notifications/subscribe`,
+
+  /** POST /api/v1/notifications/unsubscribe */
+  NOTIFICATIONS_UNSUBSCRIBE: `${API_BASE_URL}/api/v1/notifications/unsubscribe`,
+
   /** GET /health */
   HEALTH: `${API_BASE_URL}/health`,
 } as const;
+
