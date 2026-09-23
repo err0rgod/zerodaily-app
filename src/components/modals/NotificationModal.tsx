@@ -25,7 +25,6 @@ import {
   View,
 } from 'react-native';
 import { fetchArticleById } from '../../api/client';
-import { MOCK_ARTICLES } from '../../api/mockData';
 import { CATEGORIES, CATEGORY_LIST, getDynamicFallbackImage } from '../../constants/categories';
 import { scheduleTestBreakingAlert } from '../../services/notificationService';
 import { useFeedStore } from '../../store/feedStore';
@@ -77,11 +76,9 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
     }
     await markAsRead(item.article_id);
 
-    // 1. Immediate in-memory / local feed / mock search
+    // 1. Immediate in-memory / local feed search
     const { articles } = useFeedStore.getState();
-    let article =
-      articles.find((a) => a.id === item.article_id) ||
-      MOCK_ARTICLES.find((a) => a.id === item.article_id);
+    let article = articles.find((a) => a.id === item.article_id);
 
     // 2. Immediate resilient fallback directly from the notification item
     if (!article) {

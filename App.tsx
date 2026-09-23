@@ -1,3 +1,4 @@
+import * as Notifications from 'expo-notifications';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -57,6 +58,19 @@ export default function App() {
   useEffect(() => {
     initTheme();
     loadBookmarks();
+
+    // Prevent Cold-Boot Race Condition:
+    // If opening from a tapped notification, ensure the tapped story stays pinned
+    // at the front and isn't overwritten by a competing loadInitialFeed().
+    Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        if (!response) {
+          useFeedStore.getState().loadInitialFeed();
+        }
+      })
+      .catch(() => {
+        useFeedStore.getState().loadInitialFeed();
+      });
   }, [initTheme, loadBookmarks]);
 
   const handleOpenFullRoast = React.useCallback((article: Article) => {

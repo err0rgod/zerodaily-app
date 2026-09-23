@@ -1,6 +1,5 @@
 import { Article, CategoryKey, FeedResponse, NotificationHistoryResponse, SingleArticleResponse } from '../types';
 import { ENDPOINTS } from './endpoints';
-import { MOCK_ARTICLES, MOCK_NOTIFICATIONS } from './mockData';
 
 const REQUEST_TIMEOUT_MS = 6000;
 
@@ -55,21 +54,16 @@ export async function fetchFeed(
     const json: FeedResponse = await response.json();
     return json;
   } catch (error) {
-    console.warn(`[ZeroDaily API] Feed fetch failed (${category}), falling back to mock:`, error);
-    
-    // Graceful fallback to mock data filtered by category
-    const filtered = category === 'all'
-      ? MOCK_ARTICLES
-      : MOCK_ARTICLES.filter((item) => item.category === category);
+    console.warn(`[ZeroDaily API] Feed fetch failed (${category}):`, error);
 
     return {
-      status: 'success',
+      status: 'error',
       category: category === 'all' ? undefined : category,
-      data: filtered,
+      data: [],
       pagination: {
         has_more: false,
         next_cursor: null,
-        count: filtered.length,
+        count: 0,
       },
     };
   }
@@ -77,7 +71,7 @@ export async function fetchFeed(
 
 /**
  * Fetch a single article by its canonical URL ID.
- * Conforms to GET /api/v1/articles/{id:path}.
+ * Conforms to GET /api/v1/article?id={id}.
  */
 export async function fetchArticleById(id: string): Promise<Article | null> {
   try {
@@ -92,8 +86,7 @@ export async function fetchArticleById(id: string): Promise<Article | null> {
     return json.data;
   } catch (error) {
     console.warn(`[ZeroDaily API] Article fetch failed for ${id}:`, error);
-    const found = MOCK_ARTICLES.find((a) => a.id === id);
-    return found || null;
+    return null;
   }
 }
 
@@ -115,11 +108,11 @@ export async function fetchNotificationHistory(limit: number = 20): Promise<Noti
     const json: NotificationHistoryResponse = await response.json();
     return json;
   } catch (error) {
-    console.warn('[ZeroDaily API] Notification history fetch failed, using fallback:', error);
+    console.warn('[ZeroDaily API] Notification history fetch failed:', error);
     return {
-      status: 'success',
-      data: MOCK_NOTIFICATIONS,
-      count: MOCK_NOTIFICATIONS.length,
+      status: 'error',
+      data: [],
+      count: 0,
     };
   }
 }

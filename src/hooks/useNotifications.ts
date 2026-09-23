@@ -2,7 +2,6 @@ import * as Notifications from 'expo-notifications';
 import { useEffect, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { fetchArticleById, fetchNotificationHistory } from '../api/client';
-import { MOCK_ARTICLES } from '../api/mockData';
 import {
   registerForPushNotificationsAsync,
   setupNotificationChannel,
@@ -85,11 +84,9 @@ export function useNotifications(options?: UseNotificationsOptions) {
           console.log(`[ZeroDaily Notifications] Deep-linking to article: ${articleId}`);
           await useNotificationStore.getState().markAsRead(articleId);
 
-          // 1. Instant local feed or mock search
+          // 1. Instant local feed search
           const { articles, setArticleDirectly } = useFeedStore.getState();
-          let article =
-            articles.find((a) => a.id === articleId) ||
-            MOCK_ARTICLES.find((a) => a.id === articleId);
+          let article = articles.find((a) => a.id === articleId);
 
           // 2. Immediate resilient fallback from notification payload
           if (!article) {
@@ -112,7 +109,7 @@ export function useNotifications(options?: UseNotificationsOptions) {
             };
           }
 
-          // 3. Immediately focus article and notify UI to close modals
+          // 3. Immediately pin article to front and notify UI to close modals
           setArticleDirectly(article);
           optionsRef.current?.onArticleSelected?.(article);
 
@@ -124,6 +121,9 @@ export function useNotifications(options?: UseNotificationsOptions) {
               }
             })
             .catch(() => {});
+
+          // 5. Populate the feed around the pinned article (pinned story stays at index 0)
+          useFeedStore.getState().loadInitialFeed(article.category);
         }
       } catch (err) {
         console.warn('[ZeroDaily Notifications] Failed to route notification tap:', err);

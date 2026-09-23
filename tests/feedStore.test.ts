@@ -133,4 +133,64 @@ describe('FeedStore 30-Minute Cache TTL & Chronological Consistency', () => {
     expect(state.articles[0].id).toBe(mockApiArticles[0].id);
     expect(state.articles[1].id).toBe(mockApiArticles[1].id);
   });
+
+  test('ignores disk cache if older than 30 minutes and fetches fresh from web', async () => {
+    // Seed storage with stale cache (45 minutes old)
+    const staleTime = Date.now() - 45 * 60 * 1000;
+    const stalePayload = {
+      timestamp: staleTime,
+      data: [
+        {
+          id: 'https://example.com/stale-story',
+          category: 'cybersec',
+          heading: 'Old Stale Story',
+          shortSummary: 'Stale',
+          fullSummary: 'Stale full',
+          published_at: new Date(staleTime).toISOString(),
+          link: 'https://example.com/stale-story',
+          image_url: '',
+        },
+      ],
+      cursor: null,
+      hasMore: false,
+    };
+    mockStorage['@zerodaily_feed_cache_all'] = JSON.stringify(stalePayload);
+
+    await useFeedStore.getState().loadInitialFeed('all');
+
+    const state = useFeedStore.getState();
+    // Should NOT have the stale story, should have fresh articles from API
+    expect(state.articles.find((a) => a.id === 'https://example.com/stale-story')).toBeUndefined();
+    expect(state.articles.length).toBe(2);
+    expect(state.articles[0].id).toBe(mockApiArticles[0].id);
+  });
+
+  test('restores from disk cache immediately if fresh (< 30 minutes old)', async () => {
+    // Seed storage with fresh cache (10 minutes old)
+    const freshTime = Date.now() - 10 * 60 * 1000;
+    const freshPayload = {
+      timestamp: freshTime,
+      data: [
+        {
+          id: 'https://example.com/fresh-cached-story',
+          category: 'cybersec',
+          heading: 'Fresh Cached Story',
+          shortSummary: 'Fresh cached',
+          fullSummary: 'Fresh full',
+          published_at: new Date(freshTime).toISOString(),
+          link: 'https://example.com/fresh-cached-story',
+          image_url: '',
+        },
+      ],
+      cursor: null,
+      hasMore: false,
+    };
+    mockStorage['@zerodaily_feed_cache_all'] = JSON.stringify(freshPayload);
+
+    await useFeedStore.getState().loadInitialFeed('all');
+
+    const state = useFeedStore.getState();
+    // Fresh cache restored immediately
+    expect(state.articles[0].id).toBe('https://example.com/fresh-cached-story');
+  });
 });

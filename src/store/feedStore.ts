@@ -141,22 +141,21 @@ export const useFeedStore = create<FeedState>((set, get) => ({
       activeNotificationArticle: activeNotif,
     });
 
-    // 1. Try restoring from local disk cache immediately (0ms UI render)
+    // 1. If cache is fresh (< 30 minutes old), restore from disk cache
     const { payload, isFresh } = await getCachedFeed(category);
-    if (payload && payload.data.length > 0) {
-      const displayArticles = mergeWithNotification(payload.data, activeNotif, category);
+    if (isFresh && payload && payload.data.length > 0) {
+      const notif = get().activeNotificationArticle;
+      const displayArticles = mergeWithNotification(payload.data, notif, category);
       set({
         articles: displayArticles,
         cursor: payload.cursor,
         hasMore: payload.hasMore ?? true,
         isLoading: false,
       });
-
-      // If disk cache is fresh within 30-min TTL, skip immediate network fetch
-      if (isFresh) return;
+      return;
     }
 
-    // 2. Fetch fresh articles from network if cache was stale or empty
+    // 2. Cache is older than 30 minutes (or empty) -> ignore disk cache, fetch fresh from web
     try {
       const res = await fetchFeed(category);
       if (res.data && res.data.length > 0) {
@@ -196,26 +195,25 @@ export const useFeedStore = create<FeedState>((set, get) => ({
 
   loadInitialFeed: async (targetCategory?: CategoryKey) => {
     const category = targetCategory || get().category;
-    const activeNotif = get().activeNotificationArticle;
 
     set({ isLoading: true });
 
-    // 1. Try restore from local disk cache immediately (0ms UI render)
+    // 1. Check local disk cache
     const { payload, isFresh } = await getCachedFeed(category);
-    if (payload && payload.data.length > 0) {
-      const displayArticles = mergeWithNotification(payload.data, activeNotif, category);
+    if (isFresh && payload && payload.data.length > 0) {
+      // Fresh cache (< 30 minutes) -> display immediately for 0ms cold boot
+      const notif = get().activeNotificationArticle;
+      const displayArticles = mergeWithNotification(payload.data, notif, category);
       set({
         articles: displayArticles,
         cursor: payload.cursor,
         hasMore: payload.hasMore ?? true,
         isLoading: false,
       });
-
-      // If disk cache is fresh within 30-min TTL, do not overwrite with network fetch
-      if (isFresh) return;
+      return;
     }
 
-    // 2. Fetch fresh articles from network (when cache is stale or empty)
+    // 2. Cache is older than 30 minutes (or empty) -> ignore disk cache, fetch fresh from web
     try {
       const res = await fetchFeed(category);
       if (res.data && res.data.length > 0) {

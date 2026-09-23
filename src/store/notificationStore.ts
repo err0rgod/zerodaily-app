@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { fetchNotificationHistory } from '../api/client';
-import { MOCK_NOTIFICATIONS } from '../api/mockData';
 import { CategoryKey, NotificationItem } from '../types';
 
 const STORAGE_KEY_READ = '@zerodaily_read_alerts_v1';
@@ -29,11 +28,11 @@ export interface NotificationState {
 }
 
 export const useNotificationStore = create<NotificationState>((set, get) => ({
-  notifications: MOCK_NOTIFICATIONS,
+  notifications: [],
   readIds: new Set<string>(),
   dismissedIds: new Set<string>(),
-  unreadCount: MOCK_NOTIFICATIONS.length,
-  hasUnread: MOCK_NOTIFICATIONS.length > 0,
+  unreadCount: 0,
+  hasUnread: false,
   isLoading: false,
   isRefreshing: false,
   selectedCategory: 'all',
@@ -58,19 +57,11 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
           fetchedAlerts = response.data;
         }
       } catch {
-        // Network unavailable or server down, fallback to mock notifications
+        // Network unavailable or server down
       }
 
-      // Merge backend alerts with mock fallback so user always has rich content
-      const combined = [...fetchedAlerts];
-      MOCK_NOTIFICATIONS.forEach((mock) => {
-        if (!combined.some((item) => item.article_id === mock.article_id)) {
-          combined.push(mock);
-        }
-      });
-
       // Filter out user-dismissed alerts
-      const visible = combined.filter((item) => !dismissedIds.has(item.article_id));
+      const visible = fetchedAlerts.filter((item) => !dismissedIds.has(item.article_id));
       const unreadCount = visible.filter((item) => !readIds.has(item.article_id)).length;
 
       set({
@@ -94,14 +85,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
       const response = await fetchNotificationHistory(30);
       const fetchedAlerts = response?.data || [];
 
-      const combined = [...fetchedAlerts];
-      MOCK_NOTIFICATIONS.forEach((mock) => {
-        if (!combined.some((item) => item.article_id === mock.article_id)) {
-          combined.push(mock);
-        }
-      });
-
-      const visible = combined.filter((item) => !dismissedIds.has(item.article_id));
+      const visible = fetchedAlerts.filter((item) => !dismissedIds.has(item.article_id));
       const unreadCount = visible.filter((item) => !readIds.has(item.article_id)).length;
 
       set({

@@ -64,9 +64,8 @@ zerodaily-app/
 │   └── generate_assets.py            # Automated asset synthesis script
 ├── src/
 │   ├── api/
-│   │   ├── client.ts                 # Resilient HTTP client with timeout & mock fallback
-│   │   ├── endpoints.ts              # API routes matching D:/zerodaily/Docs.md
-│   │   └── mockData.ts               # Offline and preview roasted tech stories
+│   │   ├── client.ts                 # Resilient HTTP client with timeout & error handling
+│   │   └── endpoints.ts              # API routes matching D:/zerodaily/Docs.md
 │   ├── components/
 │   │   ├── common/
 │   │   │   ├── Badge.tsx             # Thematic glowing category badges

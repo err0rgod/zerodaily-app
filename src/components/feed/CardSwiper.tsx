@@ -18,6 +18,7 @@ import { useFeedStore } from '../../store/feedStore';
 import { useTheme } from '../../store/themeStore';
 import { Article, CategoryKey } from '../../types';
 import { NewsCard } from './NewsCard';
+import { ScreenGlareLoader } from './ScreenGlareLoader';
 
 interface CardSwiperProps {
   onOpenFullRoast: (article: Article) => void;
@@ -77,10 +78,12 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     return Math.max(windowDim.height - 110, 400);
   }, [windowDim.height]);
 
-  // Initial feed load
+  // Initial feed load if store is empty and not already loading
   useEffect(() => {
-    loadInitialFeed();
-  }, [loadInitialFeed]);
+    if (articles.length === 0 && !isLoading) {
+      loadInitialFeed();
+    }
+  }, [articles.length, isLoading, loadInitialFeed]);
 
   // Warm-up disk & memory image cache for category fallback pools
   useEffect(() => {
@@ -302,14 +305,8 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
 
   if (articles.length === 0) {
     if (isLoading) {
-      return (
-        <View style={[styles.emptyContainer, { backgroundColor: colors.background }]}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={[styles.emptySub, { color: colors.textSecondary, marginTop: 12 }]}>
-            Loading latest stories...
-          </Text>
-        </View>
-      );
+      const renderHeight = containerHeight > 60 ? containerHeight : getCardHeight();
+      return <ScreenGlareLoader cardHeight={renderHeight} />;
     }
     return (
       <View style={[styles.emptyContainer, { backgroundColor: colors.background }]}>
