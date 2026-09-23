@@ -86,10 +86,20 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
     const token = await getCachedPushToken();
     if (token) {
+      const allCategoryTopics = Object.values(CATEGORIES)
+        .filter((c) => c.key !== 'all' && c.fcmTopic)
+        .map((c) => c.fcmTopic);
+
       if (updatedValue) {
-        await subscribeToTopics(token, ['topic_breaking_all']);
+        await subscribeToTopics(token, allCategoryTopics);
       } else {
-        await unsubscribeFromTopics(token, ['topic_breaking_all']);
+        const activeIndividualTopics = Object.entries(preferences)
+          .filter(([k, v]) => k !== 'breaking_all' && k !== 'all' && v && CATEGORIES[k as CategoryKey]?.fcmTopic)
+          .map(([k]) => CATEGORIES[k as CategoryKey].fcmTopic);
+        const toUnsub = allCategoryTopics.filter((t) => !activeIndividualTopics.includes(t));
+        if (toUnsub.length > 0) {
+          await unsubscribeFromTopics(token, toUnsub);
+        }
       }
     }
   },
@@ -111,7 +121,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ preferences: updatedPrefs });
     await AsyncStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(updatedPrefs));
 
-    const topics: string[] = ['topic_breaking_all'];
+    const topics: string[] = [];
     for (const cat of categories) {
       const topic = CATEGORIES[cat]?.fcmTopic;
       if (topic && !topics.includes(topic)) {
@@ -120,7 +130,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     }
 
     const token = await getCachedPushToken();
-    if (token) {
+    if (token && topics.length > 0) {
       await subscribeToTopics(token, topics);
     }
   },

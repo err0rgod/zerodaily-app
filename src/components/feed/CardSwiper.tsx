@@ -38,6 +38,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     refreshFeed,
     isRefreshing,
     loadInitialFeed,
+    isLoading,
   } = useFeedStore();
 
   const { colors, isDark } = useTheme();
@@ -300,6 +301,16 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
   ).current;
 
   if (articles.length === 0) {
+    if (isLoading) {
+      return (
+        <View style={[styles.emptyContainer, { backgroundColor: colors.background }]}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.emptySub, { color: colors.textSecondary, marginTop: 12 }]}>
+            Loading latest stories...
+          </Text>
+        </View>
+      );
+    }
     return (
       <View style={[styles.emptyContainer, { backgroundColor: colors.background }]}>
         <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No Stories Available</Text>

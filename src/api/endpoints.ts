@@ -13,8 +13,8 @@ export const ENDPOINTS = {
   /** GET /api/v1/feed/{category}?limit={limit}&cursor={cursor} */
   CATEGORY_FEED: (category: string) => `${API_BASE_URL}/api/v1/feed/${encodeURIComponent(category)}`,
 
-  /** GET /api/v1/articles/{id:path} */
-  ARTICLE_BY_ID: (id: string) => `${API_BASE_URL}/api/v1/articles/${encodeURIComponent(id)}`,
+  /** GET /api/v1/article?id={id} */
+  ARTICLE_BY_ID: (id: string) => `${API_BASE_URL}/api/v1/article?id=${encodeURIComponent(id)}`,
 
   /** GET /api/v1/categories */
   CATEGORIES: `${API_BASE_URL}/api/v1/categories`,

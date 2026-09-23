@@ -230,7 +230,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
             <View style={[styles.preferenceRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View style={styles.prefTextCol}>
                 <Text style={[styles.prefTitle, { color: colors.textPrimary }]}>All Breaking News (Global)</Text>
-                <Text style={[styles.prefSub, { color: colors.textMuted }]}>Subscribes to topic_breaking_all</Text>
+                <Text style={[styles.prefSub, { color: colors.textMuted }]}>Alerts across all tech domains</Text>
               </View>
               <Switch
                 value={preferences.breaking_all}
