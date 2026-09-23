@@ -2,7 +2,6 @@ import { Image } from 'expo-image';
 import { RotateCcw } from 'lucide-react-native';
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Animated,
   Dimensions,
   Easing,
@@ -60,6 +59,29 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
 
   const isAnimatingRef = useRef<boolean>(false);
   const panY = useRef(new Animated.Value(0)).current;
+  const refreshSpinAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (isRefreshing) {
+      const loop = Animated.loop(
+        Animated.timing(refreshSpinAnim, {
+          toValue: 1,
+          duration: 900,
+          easing: Easing.linear,
+          useNativeDriver: Platform.OS !== 'web',
+        })
+      );
+      loop.start();
+      return () => loop.stop();
+    } else {
+      refreshSpinAnim.setValue(0);
+    }
+  }, [isRefreshing, refreshSpinAnim]);
+
+  const refreshSpin = refreshSpinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
 
   // Window dimension listener for screen rotations / resizes
   useEffect(() => {
@@ -438,11 +460,9 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
               },
             ]}
           >
-            {isRefreshing ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : (
+            <Animated.View style={{ transform: [{ rotate: isRefreshing ? refreshSpin : '0deg' }] }}>
               <RotateCcw size={14} color={colors.primary} />
-            )}
+            </Animated.View>
             <Text style={[styles.pullRefreshText, { color: colors.textPrimary }]}>
               {isRefreshing ? 'Refreshing stories...' : 'Pull down to refresh'}
             </Text>

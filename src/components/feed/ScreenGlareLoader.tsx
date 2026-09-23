@@ -16,8 +16,9 @@ interface ScreenGlareLoaderProps {
 
 /**
  * YouTube-style screen glare / shimmer skeleton card loader.
- * Replaces old circular spinners and loading bars with a fluid, continuous
- * metallic sheen sweeping across content placeholders.
+ * Employs a dual-layer effect:
+ * 1. Synchronized pulse animation across skeleton placeholder blocks (breathing shimmer).
+ * 2. An angled, high-contrast luminous glare beam sweeping continuously across the card.
  */
 export const ScreenGlareLoader: React.FC<ScreenGlareLoaderProps> = ({ cardHeight }) => {
   const { colors, isDark } = useTheme();
@@ -26,38 +27,76 @@ export const ScreenGlareLoader: React.FC<ScreenGlareLoaderProps> = ({ cardHeight
   const height = cardHeight || Math.max(windowHeight - 110, 400);
   const cardWidth = Math.min(windowWidth - 32, 540);
 
-  // Animated driver for sweeping glare band
-  const animatedValue = useRef(new Animated.Value(0)).current;
+  // 1. Sweeping glare beam animation (continuous loop)
+  const glareAnim = useRef(new Animated.Value(0)).current;
+
+  // 2. Skeleton breathing pulse animation
+  const pulseAnim = useRef(new Animated.Value(0.6)).current;
 
   useEffect(() => {
-    const animation = Animated.loop(
-      Animated.timing(animatedValue, {
+    // Start glare beam loop
+    const glareLoop = Animated.loop(
+      Animated.timing(glareAnim, {
         toValue: 1,
-        duration: 1400,
+        duration: 1300,
         easing: Easing.linear,
         useNativeDriver: Platform.OS !== 'web',
       })
     );
-    animation.start();
+
+    // Start skeleton pulse loop
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 750,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 0.6,
+          duration: 750,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+      ])
+    );
+
+    glareLoop.start();
+    pulseLoop.start();
 
     return () => {
-      animation.stop();
+      glareLoop.stop();
+      pulseLoop.stop();
     };
-  }, [animatedValue]);
+  }, [glareAnim, pulseAnim]);
 
-  // Translate glare from left (-100%) to right (+150%) across the card
-  const translateX = animatedValue.interpolate({
+  // Sweeping translation for glare beam from left to right
+  const translateX = glareAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [-cardWidth * 1.2, cardWidth * 1.4],
+    outputRange: [-cardWidth * 1.5, cardWidth * 2.0],
   });
 
-  // Theme-adaptive skeleton base colors and glare gradient
-  const skeletonBaseColor = isDark ? '#161926' : '#E2E8F0';
-  const skeletonMutedColor = isDark ? '#1C2030' : '#EDF2F7';
+  // Base colors for placeholders
+  const skeletonBase = isDark ? '#1C2030' : '#E2E8F0';
+  const skeletonMuted = isDark ? '#252B40' : '#EDF2F7';
 
+  // High-visibility luminous glare colors
   const glareColors = isDark
-    ? (['transparent', 'rgba(255, 255, 255, 0.03)', 'rgba(255, 255, 255, 0.12)', 'rgba(255, 255, 255, 0.03)', 'transparent'] as const)
-    : (['transparent', 'rgba(255, 255, 255, 0.25)', 'rgba(255, 255, 255, 0.70)', 'rgba(255, 255, 255, 0.25)', 'transparent'] as const);
+    ? ([
+        'rgba(255, 255, 255, 0)',
+        'rgba(255, 255, 255, 0.06)',
+        'rgba(255, 255, 255, 0.28)',
+        'rgba(255, 255, 255, 0.06)',
+        'rgba(255, 255, 255, 0)',
+      ] as const)
+    : ([
+        'rgba(255, 255, 255, 0)',
+        'rgba(255, 255, 255, 0.40)',
+        'rgba(255, 255, 255, 0.88)',
+        'rgba(255, 255, 255, 0.40)',
+        'rgba(255, 255, 255, 0)',
+      ] as const);
 
   return (
     <View style={[styles.pageWrapper, { height, backgroundColor: colors.background }]}>
@@ -71,58 +110,64 @@ export const ScreenGlareLoader: React.FC<ScreenGlareLoaderProps> = ({ cardHeight
           },
         ]}
       >
-        {/* 1. Hero Image Skeleton Placeholder */}
-        <View style={[styles.imageSkeleton, { backgroundColor: skeletonBaseColor }]} />
+        {/* 1. Animated Skeleton Content Body with Breathing Pulse */}
+        <Animated.View style={[styles.skeletonContainer, { opacity: pulseAnim }]}>
+          {/* Hero Image Placeholder */}
+          <View style={[styles.imageSkeleton, { backgroundColor: skeletonBase }]} />
 
-        {/* 2. Content Skeleton Body */}
-        <View style={styles.contentSkeleton}>
-          {/* Metadata Row Placeholder: Category Pill + Source Domain */}
-          <View style={styles.metaRow}>
-            <View style={[styles.pillSkeleton, { backgroundColor: skeletonMutedColor }]} />
-            <View style={[styles.domainSkeleton, { backgroundColor: skeletonMutedColor }]} />
-          </View>
+          {/* Content Details Placeholder */}
+          <View style={styles.contentSkeleton}>
+            {/* Metadata: Category Badge Pill + Domain */}
+            <View style={styles.metaRow}>
+              <View style={[styles.pillSkeleton, { backgroundColor: skeletonMuted }]} />
+              <View style={[styles.domainSkeleton, { backgroundColor: skeletonMuted }]} />
+            </View>
 
-          {/* Heading Line Placeholders (YouTube-style staggered title lines) */}
-          <View style={styles.headingGroup}>
-            <View style={[styles.headingLine, { width: '92%', backgroundColor: skeletonBaseColor }]} />
-            <View style={[styles.headingLine, { width: '84%', backgroundColor: skeletonBaseColor }]} />
-            <View style={[styles.headingLine, { width: '62%', backgroundColor: skeletonBaseColor }]} />
-          </View>
+            {/* Staggered Headline Lines */}
+            <View style={styles.headingGroup}>
+              <View style={[styles.headingLine, { width: '92%', backgroundColor: skeletonBase }]} />
+              <View style={[styles.headingLine, { width: '84%', backgroundColor: skeletonBase }]} />
+              <View style={[styles.headingLine, { width: '60%', backgroundColor: skeletonBase }]} />
+            </View>
 
-          {/* 60-Word Short Summary Placeholders */}
-          <View style={styles.summaryGroup}>
-            <View style={[styles.summaryLine, { width: '100%', backgroundColor: skeletonMutedColor }]} />
-            <View style={[styles.summaryLine, { width: '96%', backgroundColor: skeletonMutedColor }]} />
-            <View style={[styles.summaryLine, { width: '92%', backgroundColor: skeletonMutedColor }]} />
-            <View style={[styles.summaryLine, { width: '88%', backgroundColor: skeletonMutedColor }]} />
-            <View style={[styles.summaryLine, { width: '54%', backgroundColor: skeletonMutedColor }]} />
-          </View>
+            {/* 60-Word Summary Lines */}
+            <View style={styles.summaryGroup}>
+              <View style={[styles.summaryLine, { width: '100%', backgroundColor: skeletonMuted }]} />
+              <View style={[styles.summaryLine, { width: '96%', backgroundColor: skeletonMuted }]} />
+              <View style={[styles.summaryLine, { width: '90%', backgroundColor: skeletonMuted }]} />
+              <View style={[styles.summaryLine, { width: '85%', backgroundColor: skeletonMuted }]} />
+              <View style={[styles.summaryLine, { width: '50%', backgroundColor: skeletonMuted }]} />
+            </View>
 
-          {/* Bottom Footer Actions Placeholder */}
-          <View style={styles.footerRow}>
-            <View style={[styles.footerPill, { backgroundColor: skeletonMutedColor }]} />
-            <View style={styles.footerIcons}>
-              <View style={[styles.iconCircle, { backgroundColor: skeletonMutedColor }]} />
-              <View style={[styles.iconCircle, { backgroundColor: skeletonMutedColor }]} />
+            {/* Bottom Actions */}
+            <View style={styles.footerRow}>
+              <View style={[styles.footerPill, { backgroundColor: skeletonMuted }]} />
+              <View style={styles.footerIcons}>
+                <View style={[styles.iconCircle, { backgroundColor: skeletonMuted }]} />
+                <View style={[styles.iconCircle, { backgroundColor: skeletonMuted }]} />
+              </View>
             </View>
           </View>
-        </View>
+        </Animated.View>
 
-        {/* 3. Screen Glare / Shimmer Sheen Layer (Sweeps continuously across the card) */}
+        {/* 2. High-Contrast Sweeping Glare Beam Overlay (Native-accelerated rotate & translate) */}
         <View style={styles.glareContainer} pointerEvents="none">
           <Animated.View
             style={[
               styles.glareBand,
               {
-                width: cardWidth * 0.9,
-                transform: [{ translateX }, { skewX: '-20deg' }],
+                width: cardWidth * 0.75,
+                transform: [
+                  { translateX },
+                  { rotate: '25deg' },
+                ],
               },
             ]}
           >
             <LinearGradient
               colors={glareColors}
               start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
+              end={{ x: 1, y: 0.5 }}
               style={StyleSheet.absoluteFill}
             />
           </Animated.View>
@@ -154,6 +199,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 10,
+  },
+  skeletonContainer: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
   },
   imageSkeleton: {
     width: '100%',
@@ -222,8 +272,12 @@ const styles = StyleSheet.create({
   glareContainer: {
     ...StyleSheet.absoluteFillObject,
     overflow: 'hidden',
+    zIndex: 100,
+    elevation: 10,
   },
   glareBand: {
-    height: '100%',
+    position: 'absolute',
+    top: -120,
+    bottom: -120,
   },
 });

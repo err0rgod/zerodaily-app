@@ -74,8 +74,8 @@ describe('FeedStore 30-Minute Cache TTL & Chronological Consistency', () => {
     });
   });
 
-  test('CACHE_TTL_MS is set to exactly 30 minutes', () => {
-    expect(CACHE_TTL_MS).toBe(30 * 60 * 1000);
+  test('CACHE_TTL_MS is set to exactly 15 minutes', () => {
+    expect(CACHE_TTL_MS).toBe(15 * 60 * 1000);
   });
 
   test('setArticleDirectly pins the notification article to index 0', () => {
@@ -134,9 +134,19 @@ describe('FeedStore 30-Minute Cache TTL & Chronological Consistency', () => {
     expect(state.articles[1].id).toBe(mockApiArticles[1].id);
   });
 
-  test('ignores disk cache if older than 30 minutes and fetches fresh from web', async () => {
-    // Seed storage with stale cache (45 minutes old)
-    const staleTime = Date.now() - 45 * 60 * 1000;
+  test('refreshFeed fetches the next 20 articles using cursor when available', async () => {
+    const { fetchFeed } = require('../src/api/client');
+    (fetchFeed as jest.Mock).mockClear();
+
+    useFeedStore.setState({ cursor: 'cursor-batch-20' });
+    await useFeedStore.getState().refreshFeed();
+
+    expect(fetchFeed).toHaveBeenCalledWith('all', 'cursor-batch-20', 20);
+  });
+
+  test('ignores disk cache if older than 15 minutes and fetches fresh from web', async () => {
+    // Seed storage with stale cache (20 minutes old)
+    const staleTime = Date.now() - 20 * 60 * 1000;
     const stalePayload = {
       timestamp: staleTime,
       data: [
@@ -165,9 +175,9 @@ describe('FeedStore 30-Minute Cache TTL & Chronological Consistency', () => {
     expect(state.articles[0].id).toBe(mockApiArticles[0].id);
   });
 
-  test('restores from disk cache immediately if fresh (< 30 minutes old)', async () => {
-    // Seed storage with fresh cache (10 minutes old)
-    const freshTime = Date.now() - 10 * 60 * 1000;
+  test('restores from disk cache immediately if fresh (< 15 minutes old)', async () => {
+    // Seed storage with fresh cache (5 minutes old)
+    const freshTime = Date.now() - 5 * 60 * 1000;
     const freshPayload = {
       timestamp: freshTime,
       data: [

@@ -5,7 +5,7 @@ import { Article, CategoryKey } from '../types';
 
 const STORAGE_CACHE_KEY_PREFIX = '@zerodaily_feed_cache_';
 const PREFETCH_THRESHOLD = 8; // Fetch next batch when remaining cards <= 8
-export const CACHE_TTL_MS = 30 * 60 * 1000; // 30-minute offline cache TTL
+export const CACHE_TTL_MS = 15 * 60 * 1000; // 15-minute offline cache TTL
 
 export interface FeedCachePayload {
   timestamp: number;
@@ -235,13 +235,17 @@ export const useFeedStore = create<FeedState>((set, get) => ({
   },
 
   refreshFeed: async () => {
-    const { category, articles: currentArticles } = get();
+    const { category, cursor } = get();
     set({ isRefreshing: true });
 
     try {
-      const res = await fetchFeed(category);
+      // Fetch next 20 articles using cursor when available; wrap to beginning if cursor finished
+      let res = await fetchFeed(category, cursor || undefined, 20);
+      if ((!res.data || res.data.length === 0) && cursor) {
+        res = await fetchFeed(category, undefined, 20);
+      }
+
       if (res.data && res.data.length > 0) {
-        // Strictly chronological order - no random array shuffling
         set({
           articles: res.data,
           currentIndex: 0,
