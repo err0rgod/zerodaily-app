@@ -3,6 +3,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { subscribeToTopics } from '../api/client';
 import { CATEGORIES } from '../constants/categories';
+import { useFeedStore } from '../store/feedStore';
 import { CategoryKey, NotificationItem } from '../types';
 
 export const BREAKING_CHANNEL_ID = 'zerodaily_breaking';
@@ -189,16 +190,35 @@ export async function scheduleTestBreakingAlert(
 
   const alertData = testAlerts[category] || testAlerts.cybersec;
 
+  // Prefer live article from feed if available, otherwise test alert data
+  const currentArticles = useFeedStore.getState().articles;
+  const liveArticle = currentArticles.find((a) => category === 'all' || a.category === category) || currentArticles[0];
+
+  const title = liveArticle?.heading || alertData.heading;
+  const body = liveArticle?.push_punchline || liveArticle?.shortSummary || alertData.punchline;
+  const image = liveArticle?.image_url || alertData.image;
+  const articleId = liveArticle?.id || alertData.id;
+
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: `ZeroDaily Breaking • ${categoryMeta.name}`,
-      body: alertData.heading,
+      title: title, // Show title directly on banner (do not say ZeroDaily Breaking)
+      body: body,
       data: {
-        article_id: alertData.id,
+        article_id: articleId,
         category,
-        image_url: alertData.image,
-        push_punchline: alertData.punchline,
+        image_url: image,
+        push_punchline: body,
+        heading: title,
       },
+      attachments: image
+        ? [
+            {
+              identifier: 'image',
+              url: image,
+              type: 'image',
+            },
+          ]
+        : undefined,
       sound: 'default',
       badge: 1,
       priority: Notifications.AndroidNotificationPriority.MAX,
@@ -212,11 +232,11 @@ export async function scheduleTestBreakingAlert(
   });
 
   return {
-    article_id: alertData.id,
+    article_id: articleId,
     category,
-    heading: alertData.heading,
-    push_punchline: alertData.punchline,
-    image_url: alertData.image,
+    heading: title,
+    push_punchline: body,
+    image_url: image,
     published_at: timestamp,
   };
 }

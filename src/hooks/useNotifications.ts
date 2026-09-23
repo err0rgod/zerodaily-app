@@ -50,9 +50,13 @@ export function useNotifications(options?: UseNotificationsOptions) {
           const data = notification.request.content.data;
           const articleId = data?.article_id as string;
           const category = (data?.category || 'cybersec') as CategoryKey;
-          const punchline = (data?.push_punchline || notification.request.content.body || '') as string;
-          const heading = (notification.request.content.title || punchline) as string;
-          const imageUrl = (data?.image_url || '') as string;
+          const rawTitle = notification.request.content.title || '';
+          const rawBody = notification.request.content.body || '';
+          const isGeneric = !rawTitle || /zerodaily breaking/i.test(rawTitle);
+
+          const heading = (data?.heading as string) || (isGeneric && rawBody ? rawBody : rawTitle) || 'Breaking News';
+          const punchline = (data?.push_punchline as string) || (isGeneric ? '' : rawBody) || heading;
+          const imageUrl = (data?.image_url as string) || '';
 
           if (articleId) {
             const incomingItem: NotificationItem = {
@@ -90,8 +94,12 @@ export function useNotifications(options?: UseNotificationsOptions) {
 
           // 2. Immediate resilient fallback from notification payload
           if (!article) {
-            const heading = content.title || (data?.heading as string) || 'Breaking News';
-            const punchline = (data?.push_punchline as string) || content.body || '';
+            const rawTitle = content.title || '';
+            const rawBody = content.body || '';
+            const isGeneric = !rawTitle || /zerodaily breaking/i.test(rawTitle);
+
+            const heading = (data?.heading as string) || (isGeneric && rawBody ? rawBody : rawTitle) || 'Breaking News';
+            const punchline = (data?.push_punchline as string) || (isGeneric ? '' : rawBody) || heading;
             const category = (data?.category || 'cybersec') as CategoryKey;
             const imageUrl = (data?.image_url as string) || '';
             const link = (data?.link as string) || (articleId.startsWith('http') ? articleId : 'https://zerodaily.in');
@@ -165,6 +173,35 @@ export function useNotifications(options?: UseNotificationsOptions) {
 
             if (isCategoryActive || isBreakingAllActive) {
               useNotificationStore.getState().addIncomingNotification(newest);
+
+              // Present notification banner directly showing the story title and image (no "ZeroDaily Breaking")
+              Notifications.scheduleNotificationAsync({
+                content: {
+                  title: newest.heading,
+                  body: newest.push_punchline || newest.heading,
+                  data: {
+                    article_id: newest.article_id,
+                    category: newest.category,
+                    image_url: newest.image_url,
+                    heading: newest.heading,
+                    push_punchline: newest.push_punchline,
+                  },
+                  attachments: newest.image_url
+                    ? [
+                        {
+                          identifier: 'image',
+                          url: newest.image_url,
+                          type: 'image',
+                        },
+                      ]
+                    : undefined,
+                  sound: 'default',
+                  badge: 1,
+                  priority: Notifications.AndroidNotificationPriority.MAX,
+                  vibrate: [0, 250, 250, 250],
+                },
+                trigger: null,
+              }).catch(() => {});
             }
           }
         }
