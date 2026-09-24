@@ -16,6 +16,7 @@ interface SettingsState {
   toggleCategoryNotification: (category: CategoryKey) => Promise<void>;
   toggleBreakingAll: () => Promise<void>;
   setInitialCategories: (categories: CategoryKey[]) => Promise<void>;
+  syncSubscriptions: (customToken?: string) => Promise<boolean>;
 }
 
 const DEFAULT_PREFERENCES: NotificationPreferences = {
@@ -133,6 +134,33 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     if (token && topics.length > 0) {
       await subscribeToTopics(token, topics);
     }
+  },
+
+  syncSubscriptions: async (customToken?: string) => {
+    const token = customToken || (await getCachedPushToken());
+    if (!token) {
+      console.log('[ZeroDaily Settings] syncSubscriptions: No push token available yet.');
+      return false;
+    }
+
+    const { preferences } = get();
+    const topics: string[] = [];
+
+    // Collect all topics for enabled categories
+    for (const [key, enabled] of Object.entries(preferences)) {
+      if (key !== 'breaking_all' && key !== 'all' && enabled) {
+        const topic = CATEGORIES[key as CategoryKey]?.fcmTopic;
+        if (topic && !topics.includes(topic)) {
+          topics.push(topic);
+        }
+      }
+    }
+
+    if (topics.length > 0) {
+      console.log(`[ZeroDaily Settings] Syncing ${topics.length} active topics with backend:`, topics);
+      return await subscribeToTopics(token, topics);
+    }
+    return false;
   },
 }));
 

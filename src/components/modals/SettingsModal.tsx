@@ -120,9 +120,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
       if (token) {
         cachedFcmToken = token;
         setFcmToken(token);
+        const synced = await useSettingsStore.getState().syncSubscriptions(token);
         Alert.alert(
-          'FCM Device Token',
-          `Your device is registered with Firebase!\n\nToken:\n${token}\n\n(Use this token in Firebase Console -> "Send test message")`,
+          'FCM Device Registration',
+          `Your device push token was retrieved!\n\nTopic Subscriptions: ${synced ? 'Active (Connected to backend)' : 'Pending server response'}\n\nToken:\n${token}`,
           [{ text: 'OK' }]
         );
       } else {

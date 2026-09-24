@@ -41,7 +41,13 @@ export function useNotifications(options?: UseNotificationsOptions) {
 
     // 2. Setup channel & request remote push token once on boot
     setupNotificationChannel().catch(() => {});
-    registerForPushNotificationsAsync().catch(() => {});
+    registerForPushNotificationsAsync()
+      .then((token) => {
+        if (token) {
+          useSettingsStore.getState().syncSubscriptions(token).catch(() => {});
+        }
+      })
+      .catch(() => {});
 
     // 3. Foreground Notification Received Listener (App is Open)
     try {
@@ -214,6 +220,7 @@ export function useNotifications(options?: UseNotificationsOptions) {
     const appStateSub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
       if (nextState === 'active') {
         checkBreakingAlerts().catch(() => {});
+        useSettingsStore.getState().syncSubscriptions().catch(() => {});
       }
     });
 
