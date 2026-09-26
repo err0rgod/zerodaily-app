@@ -1,7 +1,24 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
-import { AlertCircle, Bell, Check, Copy, Moon, RefreshCw, Settings, Smartphone, Sun, Trash2, X, Zap } from 'lucide-react-native';
+import {
+  AlertCircle,
+  Bell,
+  Check,
+  Copy,
+  LogIn,
+  LogOut,
+  Moon,
+  RefreshCw,
+  Settings,
+  ShieldCheck,
+  Smartphone,
+  Sun,
+  Trash2,
+  User,
+  X,
+  Zap,
+} from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -23,6 +40,7 @@ import {
 } from '../../services/notificationService';
 import { useSettingsStore } from '../../store/settingsStore';
 import { ThemeMode, useTheme } from '../../store/themeStore';
+import { useUserStore } from '../../store/userStore';
 
 interface SettingsModalProps {
   visible: boolean;
@@ -34,10 +52,31 @@ let cachedFcmToken: string | null = null;
 export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }) => {
   const { preferences, toggleCategoryNotification, toggleBreakingAll } = useSettingsStore();
   const { colors, themeMode, setThemeMode, isDark } = useTheme();
+  const { user, isAuthenticated, isGuest, signOut, openAuthModal } = useUserStore();
   const [isSendingTest, setIsSendingTest] = useState<boolean>(false);
   const [fcmToken, setFcmToken] = useState<string | null>(cachedFcmToken);
   const [isCheckingFcm, setIsCheckingFcm] = useState<boolean>(false);
   const [hasCopiedToken, setHasCopiedToken] = useState<boolean>(false);
+
+  const handleSignOut = () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out? Your saved roasts and bookmarks will remain safely stored in your account.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            if (Platform.OS !== 'web') {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+            }
+            await signOut();
+          },
+        },
+      ]
+    );
+  };
 
   useEffect(() => {
     if (visible && !fcmToken) {
@@ -165,6 +204,78 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
           </View>
 
           <ScrollView style={styles.scrollArea} contentContainerStyle={styles.contentContainer}>
+            {/* Section: User Account & Profile */}
+            <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>ACCOUNT & PROFILE</Text>
+            <View style={[styles.accountCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              {isAuthenticated && user ? (
+                <View style={styles.accountContent}>
+                  <View style={styles.accountTopRow}>
+                    <View style={[styles.avatarCircle, { backgroundColor: colors.primarySoft }]}>
+                      <Text style={[styles.avatarText, { color: colors.primary }]}>
+                        {(user.display_name || user.email || 'U').charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={styles.accountDetails}>
+                      <Text style={[styles.accountName, { color: colors.textPrimary }]}>
+                        {user.display_name || 'ZeroDaily Reader'}
+                      </Text>
+                      <Text style={[styles.accountEmail, { color: colors.textMuted }]}>
+                        {user.email}
+                      </Text>
+                      <View style={styles.badgeRow}>
+                        <ShieldCheck size={12} color={colors.primary} />
+                        <Text style={[styles.badgeText, { color: colors.primary }]}>
+                          Active • {user.reading_count} roasts read
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  <TouchableOpacity
+                    activeOpacity={0.75}
+                    onPress={handleSignOut}
+                    style={[
+                      styles.signOutBtn,
+                      { borderColor: `${colors.danger}40`, backgroundColor: `${colors.danger}10` },
+                    ]}
+                  >
+                    <LogOut size={15} color={colors.danger} />
+                    <Text style={[styles.signOutBtnText, { color: colors.danger }]}>Sign Out</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.accountContent}>
+                  <View style={styles.accountTopRow}>
+                    <View style={[styles.avatarCircle, { backgroundColor: `${colors.textMuted}20` }]}>
+                      <User size={22} color={colors.textMuted} />
+                    </View>
+                    <View style={styles.accountDetails}>
+                      <Text style={[styles.accountName, { color: colors.textPrimary }]}>
+                        Guest Reader
+                      </Text>
+                      <Text style={[styles.accountEmail, { color: colors.textMuted }]}>
+                        Sign in to sync saved roasts, train your feed roast algorithm, and read seamlessly across devices.
+                      </Text>
+                    </View>
+                  </View>
+
+                  <TouchableOpacity
+                    activeOpacity={0.75}
+                    onPress={() => {
+                      onClose();
+                      setTimeout(() => {
+                        openAuthModal('signup');
+                      }, 300);
+                    }}
+                    style={[styles.signInBtn, { backgroundColor: colors.primary }]}
+                  >
+                    <LogIn size={15} color="#FFFFFF" />
+                    <Text style={styles.signInBtnText}>Create Account / Sign In</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+
             {/* Section: Appearance & Color Mode */}
             <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>APPEARANCE & THEME</Text>
             <View style={[styles.themeRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -435,6 +546,81 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: 16,
     paddingBottom: 40,
+  },
+  accountCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 20,
+  },
+  accountContent: {
+    gap: 14,
+  },
+  accountTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  avatarCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  accountDetails: {
+    flex: 1,
+    gap: 3,
+  },
+  accountName: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  accountEmail: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 2,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  signOutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  signOutBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  signInBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+  },
+  signInBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   themeRow: {
     flexDirection: 'row',

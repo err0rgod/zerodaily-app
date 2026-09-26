@@ -17,6 +17,7 @@ import {
 import { CATEGORIES, getDynamicFallbackImage } from '../../constants/categories';
 import { useFeedStore } from '../../store/feedStore';
 import { useTheme } from '../../store/themeStore';
+import { useUserStore } from '../../store/userStore';
 import { Article, CategoryKey } from '../../types';
 import { NewsCard } from './NewsCard';
 import { ScreenGlareLoader } from './ScreenGlareLoader';
@@ -133,6 +134,37 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
       });
     }
   }, [currentIndex, articles]);
+
+  // Track reading/dwell duration and skip telemetry for the feed algorithm
+  const cardStartTimeRef = useRef<number>(Date.now());
+  const prevArticleRef = useRef<Article | null>(null);
+
+  useEffect(() => {
+    const currentArticle = articles[currentIndex];
+    const prevArticle = prevArticleRef.current;
+
+    if (prevArticle && prevArticle.id !== currentArticle?.id) {
+      const elapsedSeconds = (Date.now() - cardStartTimeRef.current) / 1000;
+      if (elapsedSeconds >= 2.0) {
+        useUserStore.getState().trackEvent(
+          prevArticle.id,
+          prevArticle.category,
+          'read',
+          Math.min(elapsedSeconds, 120)
+        );
+      } else if (elapsedSeconds >= 0.4) {
+        useUserStore.getState().trackEvent(
+          prevArticle.id,
+          prevArticle.category,
+          'skip',
+          elapsedSeconds
+        );
+      }
+    }
+
+    cardStartTimeRef.current = Date.now();
+    prevArticleRef.current = currentArticle || null;
+  }, [currentIndex, category, articles]);
 
   // Reset animation position synchronously before paint whenever index or category changes
   useLayoutEffect(() => {

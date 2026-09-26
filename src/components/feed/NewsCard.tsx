@@ -7,6 +7,7 @@ import { Platform, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions
 import { CATEGORIES, DEFAULT_FALLBACK_IMAGE, getDynamicFallbackImage } from '../../constants/categories';
 import { useBookmarkStore } from '../../store/bookmarkStore';
 import { useTheme } from '../../store/themeStore';
+import { useUserStore } from '../../store/userStore';
 import { Article, CategoryKey } from '../../types';
 import { formatRelativeTime } from '../../utils/date';
 import { shareArticle } from '../../utils/share';
@@ -55,11 +56,23 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
   }, [article.id, article.image_url]);
 
   const handleToggleBookmark = async () => {
-    await toggleBookmark(article);
+    const isNowBookmarked = await toggleBookmark(article);
+    if (isNowBookmarked) {
+      useUserStore.getState().trackEvent(article.id, article.category, 'bookmark');
+    }
+    const currentBookmarks = useBookmarkStore.getState().bookmarks.map((b) => b.id);
+    const syncMode = isNowBookmarked ? 'merge' : 'replace';
+    useUserStore.getState().syncBookmarks(currentBookmarks, syncMode).catch(() => {});
   };
 
   const handleShare = () => {
     shareArticle(article);
+    useUserStore.getState().trackEvent(article.id, article.category, 'share');
+  };
+
+  const handleOpenFullStory = () => {
+    useUserStore.getState().trackEvent(article.id, article.category, 'full_roast', 8.0);
+    onOpenFullRoast?.(article);
   };
 
   const domain = extractDomain(article.link);
@@ -136,7 +149,7 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
         <View style={styles.bodyContainer}>
           <TouchableOpacity
             activeOpacity={0.92}
-            onPress={() => onOpenFullRoast?.(article)}
+            onPress={handleOpenFullStory}
             style={styles.headlineAndSummary}
           >
             <Text
@@ -195,7 +208,7 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
           <View style={styles.actionButtonsRow}>
             <IconButton
               icon={<ChevronRight size={18} color={colors.primary} />}
-              onPress={() => onOpenFullRoast?.(article)}
+              onPress={handleOpenFullStory}
               size={36}
               accessibilityLabel="Read the full story"
               style={[styles.actionBtn, styles.readMoreBtn, { borderColor: colors.primary }]}

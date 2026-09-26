@@ -13,11 +13,13 @@ import { CategoryOnboardingModal } from './src/components/modals/CategoryOnboard
 import { FullRoastModal } from './src/components/modals/FullRoastModal';
 import { ImageViewerModal } from './src/components/modals/ImageViewerModal';
 import { SettingsModal } from './src/components/modals/SettingsModal';
+import { AuthModal } from './src/components/modals/AuthModal';
 import { openArticleSource } from './src/components/webview/ArticleReader';
 import { useNotifications } from './src/hooks/useNotifications';
 import { useBookmarkStore } from './src/store/bookmarkStore';
 import { useFeedStore } from './src/store/feedStore';
 import { useTheme, useThemeStore } from './src/store/themeStore';
+import { useUserStore } from './src/store/userStore';
 import { Article, CategoryKey } from './src/types';
 
 export default function App() {
@@ -33,6 +35,11 @@ export default function App() {
 
   const bookmarkCount = useBookmarkStore((s) => s.bookmarks.length);
   const loadBookmarks = useBookmarkStore((s) => s.loadBookmarks);
+
+  // User auth modal state
+  const isAuthModalOpen = useUserStore((s) => s.isAuthModalOpen);
+  const authModalMode = useUserStore((s) => s.authModalMode);
+  const closeAuthModal = useUserStore((s) => s.closeAuthModal);
 
   // Modal & Navigation states
   const [activeTab, setActiveTab] = useState<BottomNavTab>('home');
@@ -58,6 +65,7 @@ export default function App() {
   useEffect(() => {
     initTheme();
     loadBookmarks();
+    useUserStore.getState().initSession();
 
     // Prevent Cold-Boot Race Condition:
     // If opening from a tapped notification, ensure the tapped story stays pinned
@@ -167,6 +175,13 @@ export default function App() {
                 setIsBookmarksOpen(false);
                 setActiveTab('home');
               }}
+            />
+
+            {/* Authentication & Profile Creation Modal */}
+            <AuthModal
+              visible={isAuthModalOpen}
+              initialMode={authModalMode}
+              onClose={closeAuthModal}
             />
 
             {/* First-launch Category Subscription Onboarding (Prompted once after install) */}

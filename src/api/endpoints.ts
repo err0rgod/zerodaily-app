@@ -30,5 +30,15 @@ export const ENDPOINTS = {
 
   /** GET /health */
   HEALTH: `${API_BASE_URL}/health`,
+
+  /** Authentication & User Tracking Endpoints */
+  AUTH_REGISTER: `${API_BASE_URL}/api/v1/auth/register`,
+  AUTH_LOGIN: `${API_BASE_URL}/api/v1/auth/login`,
+  AUTH_GUEST: `${API_BASE_URL}/api/v1/auth/guest`,
+  AUTH_FIREBASE_LOGIN: `${API_BASE_URL}/api/v1/auth/firebase-login`,
+  AUTH_ME: `${API_BASE_URL}/api/v1/auth/me`,
+  AUTH_PREFERENCES: `${API_BASE_URL}/api/v1/auth/preferences`,
+  AUTH_TRACK: `${API_BASE_URL}/api/v1/auth/track`,
+  AUTH_SYNC_BOOKMARKS: `${API_BASE_URL}/api/v1/auth/sync-bookmarks`,
 } as const;
 

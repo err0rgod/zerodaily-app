@@ -103,3 +103,49 @@ export interface FCMDataPayload {
 export type NotificationPreferences = Record<CategoryKey, boolean> & {
   breaking_all: boolean;
 };
+
+/** User account profile stored in DynamoDB and returned by API */
+export interface UserProfile {
+  user_id: string;
+  email?: string | null;
+  display_name?: string | null;
+  avatar_url?: string | null;
+  is_anonymous: boolean;
+  created_at: string;
+  last_active_at: string;
+  topic_preferences: Record<string, boolean>;
+  algo_weights: Record<string, number>;
+  bookmarked_articles: string[];
+  reading_count: number;
+}
+
+/** Authentication response envelope */
+export interface AuthResponse {
+  status: 'success' | 'error';
+  access_token: string;
+  token_type: string;
+  user: UserProfile;
+  message?: string;
+}
+
+/** User interaction tracking event payload */
+export interface TrackingEventPayload {
+  article_id: string;
+  category: string;
+  action: 'read' | 'dwell' | 'skip' | 'bookmark' | 'share' | 'full_roast';
+  duration_seconds?: number;
+}
+
+/** Tracking response envelope */
+export interface TrackingResponse {
+  status: 'success' | 'error';
+  user_id: string;
+  action: string;
+  algo_weights: Record<string, number>;
+}
+
+/** Bookmark sync response envelope */
+export interface SyncBookmarksResponse {
+  status: 'success' | 'error';
+  bookmarks: string[];
+}

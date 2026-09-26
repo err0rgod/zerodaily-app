@@ -14,6 +14,7 @@ import { CATEGORIES, getDynamicFallbackImage } from '../../constants/categories'
 import { useBookmarkStore } from '../../store/bookmarkStore';
 import { useFeedStore } from '../../store/feedStore';
 import { useTheme } from '../../store/themeStore';
+import { useUserStore } from '../../store/userStore';
 import { Article } from '../../types';
 import { formatRelativeTime } from '../../utils/date';
 import { Badge } from '../common/Badge';
@@ -27,6 +28,7 @@ export const BookmarksModal: React.FC<BookmarksModalProps> = ({ visible, onClose
   const { colors } = useTheme();
   const { bookmarks, loadBookmarks, toggleBookmark, clearAllBookmarks } = useBookmarkStore();
   const { setArticleDirectly } = useFeedStore();
+  const { isGuest, openAuthModal } = useUserStore();
 
   useEffect(() => {
     if (visible) {
@@ -37,6 +39,17 @@ export const BookmarksModal: React.FC<BookmarksModalProps> = ({ visible, onClose
   const handleSelectArticle = (article: Article) => {
     setArticleDirectly(article);
     onClose();
+  };
+
+  const handleRemoveBookmark = async (article: Article) => {
+    await toggleBookmark(article);
+    const remaining = useBookmarkStore.getState().bookmarks.map((b) => b.id);
+    useUserStore.getState().syncBookmarks(remaining, 'replace').catch(() => {});
+  };
+
+  const handleClearAll = async () => {
+    await clearAllBookmarks();
+    useUserStore.getState().syncBookmarks([], 'replace').catch(() => {});
   };
 
   const renderItem = ({ item }: { item: Article }) => {
@@ -74,12 +87,43 @@ export const BookmarksModal: React.FC<BookmarksModalProps> = ({ visible, onClose
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => toggleBookmark(item)}
+          onPress={() => handleRemoveBookmark(item)}
           style={styles.removeBtn}
         >
           <Trash2 size={16} color={colors.textMuted} />
         </TouchableOpacity>
       </View>
+    );
+  };
+
+  const renderGuestBanner = () => {
+    if (!isGuest) return null;
+    return (
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={() => {
+          onClose();
+          setTimeout(() => {
+            openAuthModal('signin');
+          }, 300);
+        }}
+        style={[
+          styles.guestBanner,
+          { backgroundColor: colors.surface, borderColor: colors.border },
+        ]}
+      >
+        <View style={styles.guestBannerText}>
+          <Text style={[styles.guestBannerTitle, { color: colors.textPrimary }]}>
+            Sync Your Saved Roasts
+          </Text>
+          <Text style={[styles.guestBannerSub, { color: colors.textMuted }]}>
+            Sign in to back up your bookmarks across devices.
+          </Text>
+        </View>
+        <View style={[styles.guestBannerBtn, { backgroundColor: colors.primary }]}>
+          <Text style={styles.guestBannerBtnText}>Sign In</Text>
+        </View>
+      </TouchableOpacity>
     );
   };
 
@@ -101,7 +145,7 @@ export const BookmarksModal: React.FC<BookmarksModalProps> = ({ visible, onClose
             <View style={styles.actionsRow}>
               {bookmarks.length > 0 && (
                 <TouchableOpacity
-                  onPress={clearAllBookmarks}
+                  onPress={handleClearAll}
                   style={[styles.clearBtn, { backgroundColor: `${colors.danger}18` }]}
                 >
                   <Text style={[styles.clearBtnText, { color: colors.danger }]}>Clear All</Text>
@@ -117,6 +161,7 @@ export const BookmarksModal: React.FC<BookmarksModalProps> = ({ visible, onClose
             data={bookmarks}
             keyExtractor={(item) => item.id}
             renderItem={renderItem}
+            ListHeaderComponent={renderGuestBanner}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
             ListEmptyComponent={
@@ -235,5 +280,37 @@ const styles = StyleSheet.create({
   emptySub: {
     fontSize: 13,
     textAlign: 'center',
+  },
+  guestBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 16,
+    gap: 12,
+  },
+  guestBannerText: {
+    flex: 1,
+    gap: 4,
+  },
+  guestBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  guestBannerSub: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  guestBannerBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  guestBannerBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

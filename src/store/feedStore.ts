@@ -2,6 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { fetchFeed } from '../api/client';
 import { Article, CategoryKey } from '../types';
+import { rankArticlesForUser } from '../utils/personalization';
+import { useUserStore } from './userStore';
 
 const STORAGE_CACHE_KEY_PREFIX = '@zerodaily_feed_cache_';
 const PREFETCH_THRESHOLD = 8; // Fetch next batch when remaining cards <= 8
@@ -115,6 +117,15 @@ function mergeWithNotification(articles: Article[], notifArticle: Article | null
   return [notifArticle, ...filtered];
 }
 
+/**
+ * Applies user algorithmic affinity weights and topic preferences, then merges notification article.
+ */
+function personalizeAndMerge(articles: Article[], notifArticle: Article | null, currentCategory: CategoryKey): Article[] {
+  const user = useUserStore.getState().user;
+  const personalized = rankArticlesForUser(articles, user, currentCategory);
+  return mergeWithNotification(personalized, notifArticle, currentCategory);
+}
+
 export const useFeedStore = create<FeedState>((set, get) => ({
   category: 'all',
   articles: [],
@@ -147,7 +158,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
     const { payload, isFresh } = await getCachedFeed(category);
     if (isFresh && payload && payload.data.length > 0) {
       const notif = get().activeNotificationArticle;
-      const displayArticles = mergeWithNotification(payload.data, notif, category);
+      const displayArticles = personalizeAndMerge(payload.data, notif, category);
       set({
         articles: displayArticles,
         cursor: payload.cursor,
@@ -162,7 +173,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
       const res = await fetchFeed(category);
       if (res.data && res.data.length > 0) {
         const notif = get().activeNotificationArticle;
-        const displayArticles = mergeWithNotification(res.data, notif, category);
+        const displayArticles = personalizeAndMerge(res.data, notif, category);
         set({
           articles: displayArticles,
           cursor: res.pagination.next_cursor,
@@ -205,7 +216,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
     if (isFresh && payload && payload.data.length > 0) {
       // Fresh cache (< 30 minutes) -> display immediately for 0ms cold boot
       const notif = get().activeNotificationArticle;
-      const displayArticles = mergeWithNotification(payload.data, notif, category);
+      const displayArticles = personalizeAndMerge(payload.data, notif, category);
       set({
         articles: displayArticles,
         cursor: payload.cursor,
@@ -220,7 +231,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
       const res = await fetchFeed(category);
       if (res.data && res.data.length > 0) {
         const notif = get().activeNotificationArticle;
-        const displayArticles = mergeWithNotification(res.data, notif, category);
+        const displayArticles = personalizeAndMerge(res.data, notif, category);
         set({
           articles: displayArticles,
           cursor: res.pagination.next_cursor,
@@ -260,8 +271,9 @@ export const useFeedStore = create<FeedState>((set, get) => ({
       }
 
       if (res.data && res.data.length > 0) {
+        const displayArticles = personalizeAndMerge(res.data, null, category);
         set({
-          articles: res.data,
+          articles: displayArticles,
           currentIndex: 0,
           cursor: res.pagination?.next_cursor || null,
           hasMore: res.pagination?.has_more ?? true,
@@ -293,8 +305,10 @@ export const useFeedStore = create<FeedState>((set, get) => ({
         // Deduplicate incoming articles by ID
         const existingIds = new Set(articles.map((a) => a.id));
         const fresh = res.data.filter((a) => !existingIds.has(a.id));
+        const user = useUserStore.getState().user;
+        const personalizedFresh = rankArticlesForUser(fresh, user, category);
 
-        const updated = [...articles, ...fresh];
+        const updated = [...articles, ...personalizedFresh];
         set({
           articles: updated,
           cursor: res.pagination.next_cursor,
