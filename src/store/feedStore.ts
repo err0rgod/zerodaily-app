@@ -6,6 +6,8 @@ import { Article, CategoryKey } from '../types';
 const STORAGE_CACHE_KEY_PREFIX = '@zerodaily_feed_cache_';
 const PREFETCH_THRESHOLD = 8; // Fetch next batch when remaining cards <= 8
 export const CACHE_TTL_MS = 15 * 60 * 1000; // 15-minute offline cache TTL
+/** How long a refresh may stay in flight before the spinner is force-cleared. */
+const REFRESH_TIMEOUT_MS = 20 * 1000;
 
 export interface FeedCachePayload {
   timestamp: number;
@@ -235,8 +237,20 @@ export const useFeedStore = create<FeedState>((set, get) => ({
   },
 
   refreshFeed: async () => {
+    // A second pull while a refresh is already in flight would stack requests
+    // and race over the cursor; ignore it.
+    if (get().isRefreshing) return;
+
     const { category, cursor } = get();
     set({ isRefreshing: true });
+
+    // Backstop for a request that never settles. Every other path clears the
+    // flag, so this only fires on a genuine hang and stops the spinner from
+    // staying up indefinitely.
+    let settled = false;
+    const hangGuard = setTimeout(() => {
+      if (!settled) set({ isRefreshing: false });
+    }, REFRESH_TIMEOUT_MS);
 
     try {
       // Fetch next 20 articles using cursor when available; wrap to beginning if cursor finished
@@ -261,6 +275,9 @@ export const useFeedStore = create<FeedState>((set, get) => ({
     } catch {
       // Offline fallback: keep existing chronological articles
       set({ isRefreshing: false });
+    } finally {
+      settled = true;
+      clearTimeout(hangGuard);
     }
   },
 

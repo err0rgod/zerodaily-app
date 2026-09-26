@@ -3,6 +3,7 @@ import { Image } from 'expo-image';
 import { RotateCcw } from 'lucide-react-native';
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   Dimensions,
   Easing,
@@ -25,6 +26,9 @@ interface CardSwiperProps {
   onOpenSourceLink: (url: string) => void;
   onOpenImageViewer?: (imageUri: string, heading: string, category: CategoryKey) => void;
 }
+
+/** Drag distance at the top card past which releasing triggers a refresh. */
+const PULL_REFRESH_TRIGGER_PX = 55;
 
 export const CardSwiper: React.FC<CardSwiperProps> = ({
   onOpenFullRoast,
@@ -59,32 +63,24 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
   containerHeightRef.current = containerHeight;
 
   const isAnimatingRef = useRef<boolean>(false);
-  const gestureDirectionRef = useRef<'none' | 'vertical' | 'horizontal'>('none');
   const panY = useRef(new Animated.Value(0)).current;
-  const panX = useRef(new Animated.Value(0)).current;
-  const refreshSpinAnim = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
-    if (isRefreshing) {
-      const loop = Animated.loop(
-        Animated.timing(refreshSpinAnim, {
-          toValue: 1,
-          duration: 900,
-          easing: Easing.linear,
-          useNativeDriver: Platform.OS !== 'web',
-        })
-      );
-      loop.start();
-      return () => loop.stop();
-    } else {
-      refreshSpinAnim.setValue(0);
-    }
-  }, [isRefreshing, refreshSpinAnim]);
+  /**
+   * The pull-to-refresh badge is mounted only while a drag is genuinely in
+   * progress. Its old visibility came purely from an animated value, and with
+   * the native driver that value could survive the deck unmounting mid-refresh
+   * and strand the badge on screen until the next touch.
+   */
+  const [isPulling, setIsPulling] = useState(false);
+  const [canRelease, setCanRelease] = useState(false);
+  const canReleaseRef = useRef<boolean>(false);
 
-  const refreshSpin = refreshSpinAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
+  /** Drag distance past which releasing triggers a refresh. */
+  const setReleaseReady = (ready: boolean) => {
+    if (ready === canReleaseRef.current) return;
+    canReleaseRef.current = ready;
+    setCanRelease(ready);
+  };
 
   // Window dimension listener for screen rotations / resizes
   useEffect(() => {
@@ -141,12 +137,12 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
   // Reset animation position synchronously before paint whenever index or category changes
   useLayoutEffect(() => {
     panY.stopAnimation();
-    panX.stopAnimation();
     panY.setValue(0);
-    panX.setValue(0);
     isAnimatingRef.current = false;
-    gestureDirectionRef.current = 'none';
-  }, [category, currentIndex, panY, panX]);
+    canReleaseRef.current = false;
+    setIsPulling(false);
+    setCanRelease(false);
+  }, [category, currentIndex, panY]);
 
   // Capture container height dynamically
   const handleLayout = (e: LayoutChangeEvent) => {
@@ -236,7 +232,8 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     };
   }, [goToNextCard, goToPrevCard]);
 
-  // Robust PanResponder supporting both vertical card-deck switching & horizontal slide-left full-story preview
+  // Vertical-only card deck. The full story is reached through the arrow
+  // button on the card, so no horizontal axis is claimed here.
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
@@ -244,64 +241,28 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
 
       onMoveShouldSetPanResponder: (_, gesture) => {
         if (isAnimatingRef.current) return false;
-        // Vertical card swipe when displacement > 12px
-        const isVertical = Math.abs(gesture.dy) > 12 && Math.abs(gesture.dy) > Math.abs(gesture.dx) * 0.75;
-        // Horizontal left swipe to view full story & image when displacement < -14px
-        const isHorizontalLeft = gesture.dx < -14 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 0.75;
-        return isVertical || isHorizontalLeft;
+        return (
+          Math.abs(gesture.dy) > 12 && Math.abs(gesture.dy) > Math.abs(gesture.dx) * 0.75
+        );
       },
       onMoveShouldSetPanResponderCapture: () => false,
 
       onPanResponderGrant: () => {
         panY.stopAnimation();
-        panX.stopAnimation();
         isAnimatingRef.current = false;
-        gestureDirectionRef.current = 'none';
+        setIsPulling(true);
       },
 
       onPanResponderMove: (_, gesture) => {
         if (isAnimatingRef.current) return;
-
-        if (gestureDirectionRef.current === 'none') {
-          if (Math.abs(gesture.dy) > Math.abs(gesture.dx)) {
-            gestureDirectionRef.current = 'vertical';
-          } else if (gesture.dx < 0) {
-            gestureDirectionRef.current = 'horizontal';
-          }
-        }
-
-        if (gestureDirectionRef.current === 'vertical') {
-          panY.setValue(gesture.dy);
-        } else if (gestureDirectionRef.current === 'horizontal') {
-          const clamped = Math.max(gesture.dx, -windowDim.width * 0.65);
-          panX.setValue(clamped);
-        }
+        setReleaseReady(gesture.dy > PULL_REFRESH_TRIGGER_PX);
+        panY.setValue(gesture.dy);
       },
 
       onPanResponderRelease: (_, gesture) => {
+        setIsPulling(false);
+        setReleaseReady(false);
         if (isAnimatingRef.current) return;
-
-        if (gestureDirectionRef.current === 'horizontal') {
-          const isLeftSlide = gesture.dx < -55 || gesture.vx < -0.3;
-          if (isLeftSlide) {
-            const article = articlesRef.current[currentIndexRef.current];
-            if (article) {
-              if (Platform.OS !== 'web') {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-              }
-              onOpenFullRoast(article);
-            }
-          }
-          Animated.spring(panX, {
-            toValue: 0,
-            friction: 7,
-            tension: 50,
-            useNativeDriver: Platform.OS !== 'web',
-          }).start(() => {
-            gestureDirectionRef.current = 'none';
-          });
-          return;
-        }
 
         const height = getCardHeight();
         const threshold = Math.min(height * 0.12, 80); // Distance threshold (80px max)
@@ -333,21 +294,14 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
           }).start(() => {
             setCurrentIndex(curr - 1);
           });
-        } else if (isDownSwipe && curr === 0) {
-          // Pull-down at top card: Refresh trigger
-          if (gesture.dy > 55) {
+        } else {
+          // Pull-down at the top card triggers a refresh; anything else snaps back
+          if (isDownSwipe && curr === 0 && gesture.dy > PULL_REFRESH_TRIGGER_PX) {
+            if (Platform.OS !== 'web') {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+            }
             refreshFeed();
           }
-          Animated.spring(panY, {
-            toValue: 0,
-            friction: 7,
-            tension: 50,
-            useNativeDriver: Platform.OS !== 'web',
-          }).start(() => {
-            isAnimatingRef.current = false;
-          });
-        } else {
-          // Swipe didn't exceed threshold: Snap back to rest
           Animated.spring(panY, {
             toValue: 0,
             friction: 7,
@@ -362,14 +316,9 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
       onPanResponderTerminationRequest: () => false,
       onPanResponderTerminate: () => {
         isAnimatingRef.current = false;
-        gestureDirectionRef.current = 'none';
+        setIsPulling(false);
+        setReleaseReady(false);
         Animated.spring(panY, {
-          toValue: 0,
-          friction: 7,
-          tension: 50,
-          useNativeDriver: Platform.OS !== 'web',
-        }).start();
-        Animated.spring(panX, {
           toValue: 0,
           friction: 7,
           tension: 50,
@@ -379,9 +328,11 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     })
   ).current;
 
-  // Show ScreenGlareLoader on initial load AND on pull-to-refresh
-  if (articles.length === 0 || isRefreshing) {
-    if (isLoading || isRefreshing) {
+  // The deck stays mounted while a refresh is in flight. Swapping it for the
+  // skeleton used to unmount the very view the pan gesture was attached to and
+  // blank the card the user was reading.
+  if (articles.length === 0) {
+    if (isLoading) {
       const renderHeight = containerHeight > 60 ? containerHeight : getCardHeight();
       return <ScreenGlareLoader cardHeight={renderHeight} />;
     }
@@ -494,14 +445,14 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
       {...panResponder.panHandlers}
     >
       <View style={styles.deckWrapper}>
-        {/* Pull to refresh visual badge (when pulling down at card 0) */}
-        {currentIndex === 0 && (
+        {/* Pull affordance, mounted only during an active drag */}
+        {isPulling && !isRefreshing && currentIndex === 0 && (
           <Animated.View
             style={[
               styles.pullRefreshBadge,
               {
                 backgroundColor: colors.surface,
-                borderColor: colors.border,
+                borderColor: canRelease ? colors.primary : colors.border,
                 opacity: pullProgress,
                 transform: [
                   {
@@ -515,13 +466,28 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
               },
             ]}
           >
-            <Animated.View style={{ transform: [{ rotate: isRefreshing ? refreshSpin : '0deg' }] }}>
-              <RotateCcw size={14} color={colors.primary} />
-            </Animated.View>
+            <RotateCcw size={14} color={colors.primary} />
             <Text style={[styles.pullRefreshText, { color: colors.textPrimary }]}>
-              {isRefreshing ? 'Refreshing stories...' : 'Pull down to refresh'}
+              {canRelease ? 'Release to refresh' : 'Pull down to refresh'}
             </Text>
           </Animated.View>
+        )}
+
+        {/* Refresh-in-flight pill. Driven by store state alone, so it cannot
+            outlive the request the way an animated value could. */}
+        {isRefreshing && (
+          <View
+            style={[
+              styles.pullRefreshBadge,
+              styles.refreshingBadge,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={[styles.pullRefreshText, { color: colors.textPrimary }]}>
+              Refreshing stories...
+            </Text>
+          </View>
         )}
 
         {/* PERSISTENT 3-SLOT DECK: Pre-mounts incoming cards so images never blink across slides */}
@@ -534,7 +500,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
           const isPrev = slotIndex === prevSlot;
 
           const layerTransform = isCurrent
-            ? [{ translateY: activeCardTranslateY }, { translateX: panX }]
+            ? [{ translateY: activeCardTranslateY }]
             : isNext
             ? [{ translateY: nextCardTranslateY }, { scale: nextCardScale }]
             : [{ translateY: prevCardTranslateY }, { scale: prevCardScale }];
@@ -632,6 +598,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 5,
     elevation: 4,
+  },
+  refreshingBadge: {
+    transform: [{ translateY: 12 }],
   },
   pullRefreshText: {
     fontSize: 11.5,

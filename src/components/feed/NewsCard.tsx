@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Bookmark, ExternalLink, Globe, Share2 } from 'lucide-react-native';
+import { Bookmark, ChevronRight, ExternalLink, Globe, Share2 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Platform, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { CATEGORIES, DEFAULT_FALLBACK_IMAGE, getDynamicFallbackImage } from '../../constants/categories';
@@ -154,12 +154,6 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
             >
               {article.shortSummary}
             </Text>
-
-            <View style={styles.swipeLeftCue}>
-              <Text style={[styles.swipeLeftText, { color: colors.textMuted }]}>
-                Swipe left for full story & image →
-              </Text>
-            </View>
           </TouchableOpacity>
         </View>
 
@@ -200,6 +194,13 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
           {/* Bookmark & Share Actions */}
           <View style={styles.actionButtonsRow}>
             <IconButton
+              icon={<ChevronRight size={18} color={colors.primary} />}
+              onPress={() => onOpenFullRoast?.(article)}
+              size={36}
+              accessibilityLabel="Read the full story"
+              style={[styles.actionBtn, styles.readMoreBtn, { borderColor: colors.primary }]}
+            />
+            <IconButton
               icon={
                 <Bookmark
                   size={17}
@@ -210,12 +211,14 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
               onPress={handleToggleBookmark}
               size={36}
               active={bookmarked}
+              accessibilityLabel={bookmarked ? 'Remove bookmark' : 'Bookmark this story'}
               style={styles.actionBtn}
             />
             <IconButton
               icon={<Share2 size={17} color={colors.textPrimary} />}
               onPress={handleShare}
               size={36}
+              accessibilityLabel="Share this story"
               style={styles.actionBtn}
             />
           </View>
@@ -322,15 +325,8 @@ const styles = StyleSheet.create({
     lineHeight: 22.5,
     letterSpacing: 0.1,
   },
-  swipeLeftCue: {
-    marginTop: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  swipeLeftText: {
-    fontSize: 11,
-    fontWeight: '500',
-    letterSpacing: 0.2,
+  readMoreBtn: {
+    borderWidth: 1.5,
   },
   footerContainer: {
     flexDirection: 'row',
