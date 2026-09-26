@@ -81,17 +81,17 @@ const SHARED_DESIGN = {
 } as const;
 
 export const DARK_THEME_COLORS: ThemeColors = {
-  background: '#090A0F',
-  surface: '#121520',
-  surfaceHover: '#1B2030',
-  card: '#11141F',
-  cardBorder: '#1E2538',
-  cardElevated: '#171B2B',
+  background: '#000000',
+  surface: '#0E0E0E',
+  surfaceHover: '#171717',
+  card: '#0A0A0A',
+  cardBorder: '#1F1F1F',
+  cardElevated: '#141414',
 
-  textPrimary: '#F8FAFC',
-  textSecondary: '#94A3B8',
-  textMuted: '#64748B',
-  textHighlight: '#38BDF8',
+  textPrimary: '#FFFFFF',
+  textSecondary: '#A1A1AA',
+  textMuted: '#71717A',
+  textHighlight: '#E4E4E7',
 
   primary: '#10B981',
   primaryGlow: 'rgba(16, 185, 129, 0.25)',
@@ -110,14 +110,14 @@ export const DARK_THEME_COLORS: ThemeColors = {
   hardware: '#F97316',
   finance: '#14B8A6',
 
-  border: '#1E2538',
-  borderLight: '#2B354F',
+  border: '#1F1F1F',
+  borderLight: '#27272A',
   borderSubtle: 'rgba(255, 255, 255, 0.08)',
-  overlay: 'rgba(0, 0, 0, 0.78)',
-  shimmer: '#1E2538',
+  overlay: 'rgba(0, 0, 0, 0.85)',
+  shimmer: '#1A1A1A',
   scrimStart: 'transparent',
-  scrimMid: 'rgba(17, 20, 31, 0.65)',
-  scrimEnd: '#11141F',
+  scrimMid: 'rgba(10, 10, 10, 0.70)',
+  scrimEnd: '#0A0A0A',
   statusBarStyle: 'light',
 };
 

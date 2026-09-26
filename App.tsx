@@ -150,6 +150,7 @@ export default function App() {
               visible={isRoastModalOpen}
               article={selectedRoastArticle}
               onClose={() => setIsRoastModalOpen(false)}
+              onOpenSourceLink={handleOpenSource}
             />
 
             <SettingsModal

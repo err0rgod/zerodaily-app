@@ -66,7 +66,7 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
   const relativeTime = formatRelativeTime(article.published_at);
 
   const scrimColors = isDark
-    ? (['transparent', 'rgba(17, 20, 31, 0.40)', colors.card] as const)
+    ? (['transparent', 'rgba(10, 10, 10, 0.45)', colors.card] as const)
     : (['transparent', 'rgba(255, 255, 255, 0.45)', colors.card] as const);
 
   return (
@@ -96,7 +96,7 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
           style={[
             styles.imageContainer,
             {
-              backgroundColor: isDark ? '#080B12' : '#F1F5F9',
+              backgroundColor: isDark ? '#050505' : '#F1F5F9',
               height: isLargeFont ? '42%' : '47%',
             },
           ]}
@@ -134,10 +134,13 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
 
         {/* 2. Editorial Headline & Fully Extended Summary Body */}
         <View style={styles.bodyContainer}>
-          <View style={styles.headlineAndSummary}>
+          <TouchableOpacity
+            activeOpacity={0.92}
+            onPress={() => onOpenFullRoast?.(article)}
+            style={styles.headlineAndSummary}
+          >
             <Text
               style={[styles.heading, { color: colors.textPrimary }]}
-              numberOfLines={headingLines}
               maxFontSizeMultiplier={1.22}
             >
               {article.heading}
@@ -151,7 +154,13 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
             >
               {article.shortSummary}
             </Text>
-          </View>
+
+            <View style={styles.swipeLeftCue}>
+              <Text style={[styles.swipeLeftText, { color: colors.textMuted }]}>
+                Swipe left for full story & image →
+              </Text>
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* 3. Refined Footer Actions Bar */}
@@ -312,6 +321,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22.5,
     letterSpacing: 0.1,
+  },
+  swipeLeftCue: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  swipeLeftText: {
+    fontSize: 11,
+    fontWeight: '500',
+    letterSpacing: 0.2,
   },
   footerContainer: {
     flexDirection: 'row',

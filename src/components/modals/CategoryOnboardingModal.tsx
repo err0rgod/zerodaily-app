@@ -167,71 +167,73 @@ export const CategoryOnboardingModal: React.FC<CategoryOnboardingModalProps> = (
             </TouchableOpacity>
           </View>
 
-          {/* Category List */}
+          {/* Category Grid Boxes */}
           <ScrollView
             style={styles.scrollView}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {NOTIFICATION_CATEGORIES.map((cat) => {
-              const isSelected = selectedCategories.includes(cat.key);
-              const catColor = colors[cat.key] || cat.accentColor;
+            <View style={styles.gridContainer}>
+              {NOTIFICATION_CATEGORIES.map((cat) => {
+                const isSelected = selectedCategories.includes(cat.key);
+                const catColor = colors[cat.key] || cat.accentColor;
 
-              return (
-                <TouchableOpacity
-                  key={cat.key}
-                  activeOpacity={0.75}
-                  onPress={() => handleToggleCategory(cat.key)}
-                  style={[
-                    styles.categoryCard,
-                    {
-                      backgroundColor: isSelected
-                        ? isDark
-                          ? '#1A2333'
-                          : '#F1F5F9'
-                        : colors.surface,
-                      borderColor: isSelected ? catColor : colors.border,
-                      borderWidth: isSelected ? 1.5 : 1,
-                    },
-                  ]}
-                >
-                  <View style={styles.cardLeft}>
-                    <View style={[styles.dot, { backgroundColor: catColor }]} />
-                    <View style={styles.cardTextContainer}>
-                      <Text
-                        style={[
-                          styles.cardTitle,
-                          {
-                            color: colors.textPrimary,
-                            fontWeight: isSelected ? '700' : '600',
-                          },
-                        ]}
-                      >
-                        {cat.name}
-                      </Text>
-                      <Text
-                        style={[styles.cardDescription, { color: colors.textMuted }]}
-                        numberOfLines={2}
-                      >
-                        {cat.description}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View
+                return (
+                  <TouchableOpacity
+                    key={cat.key}
+                    activeOpacity={0.78}
+                    onPress={() => handleToggleCategory(cat.key)}
                     style={[
-                      styles.checkbox,
+                      styles.channelBox,
                       {
-                        backgroundColor: isSelected ? catColor : 'transparent',
-                        borderColor: isSelected ? catColor : colors.border,
+                        backgroundColor: isSelected
+                          ? isDark
+                            ? '#161616'
+                            : '#F1F5F9'
+                          : colors.surface,
+                        borderColor: isSelected ? colors.primary : colors.border,
+                        borderWidth: isSelected ? 1.5 : 1,
                       },
                     ]}
                   >
-                    {isSelected && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
+                    <View style={styles.boxHeaderRow}>
+                      <View style={[styles.boxDot, { backgroundColor: catColor }]} />
+                      <View
+                        style={[
+                          styles.boxCheckCircle,
+                          {
+                            backgroundColor: isSelected ? colors.primary : 'transparent',
+                            borderColor: isSelected ? colors.primary : colors.border,
+                          },
+                        ]}
+                      >
+                        {isSelected && <Check size={12} color="#FFFFFF" strokeWidth={3} />}
+                      </View>
+                    </View>
+
+                    <Text
+                      style={[
+                        styles.boxTitle,
+                        {
+                          color: colors.textPrimary,
+                          fontWeight: isSelected ? '700' : '600',
+                        },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {cat.name}
+                    </Text>
+
+                    <Text
+                      style={[styles.boxDescription, { color: colors.textMuted }]}
+                      numberOfLines={2}
+                    >
+                      {cat.description}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </ScrollView>
 
           {/* Bottom Action Footer */}
@@ -333,48 +335,49 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    gap: 10,
+    paddingHorizontal: 16,
+    paddingBottom: 20,
   },
-  categoryCard: {
+  gridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 10,
+  },
+  channelBox: {
+    width: '48.5%',
+    padding: 13,
+    borderRadius: 15,
+    minHeight: 110,
+    justifyContent: 'space-between',
+  },
+  boxHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 14,
+    marginBottom: 8,
   },
-  cardLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: 12,
-    paddingRight: 10,
+  boxDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  cardTextContainer: {
-    flex: 1,
-  },
-  cardTitle: {
-    fontSize: 15,
-    marginBottom: 2,
-  },
-  cardDescription: {
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
+  boxCheckCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  boxTitle: {
+    fontSize: 14.5,
+    marginBottom: 4,
+    letterSpacing: -0.2,
+  },
+  boxDescription: {
+    fontSize: 11.5,
+    lineHeight: 15.5,
   },
   footer: {
     paddingHorizontal: 20,

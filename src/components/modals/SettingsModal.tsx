@@ -33,7 +33,7 @@ let cachedFcmToken: string | null = null;
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }) => {
   const { preferences, toggleCategoryNotification, toggleBreakingAll } = useSettingsStore();
-  const { colors, themeMode, setThemeMode } = useTheme();
+  const { colors, themeMode, setThemeMode, isDark } = useTheme();
   const [isSendingTest, setIsSendingTest] = useState<boolean>(false);
   const [fcmToken, setFcmToken] = useState<string | null>(cachedFcmToken);
   const [isCheckingFcm, setIsCheckingFcm] = useState<boolean>(false);
@@ -236,32 +236,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
               <Switch
                 value={preferences.breaking_all}
                 onValueChange={toggleBreakingAll}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor={colors.textPrimary}
+                trackColor={{ false: isDark ? '#27272A' : '#E4E4E7', true: isDark ? '#3F3F46' : '#71717A' }}
+                thumbColor={preferences.breaking_all ? (isDark ? '#FFFFFF' : '#0F172A') : (isDark ? '#71717A' : '#94A3B8')}
               />
             </View>
 
             {/* Individual Categories */}
             {CATEGORY_LIST.filter((c) => c.key !== 'all').map((category) => {
               const isEnabled = preferences[category.key];
-              const catColor = colors[category.key] || category.accentColor;
               return (
                 <View
                   key={category.key}
                   style={[styles.preferenceRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
                 >
                   <View style={styles.prefTextCol}>
-                    <View style={styles.catRow}>
-                      <View style={[styles.colorDot, { backgroundColor: catColor }]} />
-                      <Text style={[styles.prefTitle, { color: colors.textPrimary }]}>{category.name}</Text>
-                    </View>
+                    <Text style={[styles.prefTitle, { color: colors.textPrimary }]}>{category.name}</Text>
                     <Text style={[styles.prefSub, { color: colors.textMuted }]}>Topic: {category.fcmTopic}</Text>
                   </View>
                   <Switch
                     value={isEnabled}
                     onValueChange={() => toggleCategoryNotification(category.key)}
-                    trackColor={{ false: colors.border, true: catColor }}
-                    thumbColor={colors.textPrimary}
+                    trackColor={{ false: isDark ? '#27272A' : '#E4E4E7', true: isDark ? '#3F3F46' : '#71717A' }}
+                    thumbColor={isEnabled ? (isDark ? '#FFFFFF' : '#0F172A') : (isDark ? '#71717A' : '#94A3B8')}
                   />
                 </View>
               );

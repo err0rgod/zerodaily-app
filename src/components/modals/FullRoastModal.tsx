@@ -1,7 +1,10 @@
-import { Flame, X } from 'lucide-react-native';
-import React from 'react';
+import * as Haptics from 'expo-haptics';
+import { Image } from 'expo-image';
+import { Bookmark, ChevronLeft, ExternalLink, Globe, Share2, X } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
 import {
   Modal,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -9,48 +12,125 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { CATEGORIES } from '../../constants/categories';
+import { CATEGORIES, getDynamicFallbackImage } from '../../constants/categories';
+import { useBookmarkStore } from '../../store/bookmarkStore';
 import { useTheme } from '../../store/themeStore';
 import { Article } from '../../types';
+import { formatRelativeTime } from '../../utils/date';
+import { shareArticle } from '../../utils/share';
+import { extractDomain } from '../../utils/url';
 import { Badge } from '../common/Badge';
+import { IconButton } from '../common/IconButton';
 
 interface FullRoastModalProps {
   article: Article | null;
   visible: boolean;
   onClose: () => void;
+  onOpenSourceLink?: (url: string) => void;
 }
 
 export const FullRoastModal: React.FC<FullRoastModalProps> = ({
   article,
   visible,
   onClose,
+  onOpenSourceLink,
 }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const bookmarked = useBookmarkStore(
+    React.useCallback((s) => (article ? s.bookmarks.some((b) => b.id === article.id) : false), [article?.id])
+  );
+  const toggleBookmark = useBookmarkStore((s) => s.toggleBookmark);
+
+  const [hasLoadError, setHasLoadError] = useState<boolean>(false);
+
+  useEffect(() => {
+    setHasLoadError(false);
+  }, [article?.id, article?.image_url]);
 
   if (!article) return null;
 
   const categoryMeta = CATEGORIES[article.category] || CATEGORIES.all;
   const categoryAccent = colors[article.category] || categoryMeta.accentColor;
-  const paragraphs = article.fullSummary.split('\n\n');
+  const dynamicFallback = getDynamicFallbackImage(article.id, article.category);
+  const isValidUrl = Boolean(article.image_url && article.image_url.trim().length > 0);
+  const imageUri = isValidUrl && !hasLoadError ? article.image_url : dynamicFallback;
+
+  const domain = extractDomain(article.link);
+  const relativeTime = formatRelativeTime(article.published_at);
+  const paragraphs = (article.fullSummary || article.shortSummary || '')
+    .split('\n\n')
+    .filter((p) => p.trim().length > 0);
+
+  const handleToggleBookmark = async () => {
+    if (Platform.OS !== 'web') {
+      Haptics.selectionAsync().catch(() => {});
+    }
+    await toggleBookmark(article);
+  };
+
+  const handleShare = () => {
+    shareArticle(article);
+  };
+
+  const handleClose = () => {
+    if (Platform.OS !== 'web') {
+      Haptics.selectionAsync().catch(() => {});
+    }
+    onClose();
+  };
 
   return (
     <Modal
       visible={visible}
       animationType="slide"
       presentationStyle="pageSheet"
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
     >
       <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
         <View style={[styles.container, { backgroundColor: colors.background }]}>
-          {/* Header */}
-          <View style={[styles.header, { borderBottomColor: colors.border }]}>
-            <View style={styles.titleRow}>
-              <Flame size={20} color={colors.warning} />
-              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Full Roast Breakdown</Text>
-            </View>
-            <TouchableOpacity onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.surface }]}>
-              <X size={20} color={colors.textPrimary} />
+          {/* Header navigation bar */}
+          <View style={[styles.header, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={handleClose}
+              style={[styles.navBtn, { backgroundColor: colors.background, borderColor: colors.border }]}
+            >
+              <ChevronLeft size={20} color={colors.textPrimary} />
             </TouchableOpacity>
+
+            <View style={styles.headerTitleContainer}>
+              <Text style={[styles.headerBrand, { color: colors.textPrimary }]}>ZERODAILY</Text>
+              <Text style={[styles.headerSub, { color: colors.textMuted }]}>Full Story</Text>
+            </View>
+
+            <View style={styles.headerActions}>
+              <IconButton
+                icon={
+                  <Bookmark
+                    size={18}
+                    color={bookmarked ? colors.primary : colors.textPrimary}
+                    fill={bookmarked ? colors.primary : 'transparent'}
+                  />
+                }
+                onPress={handleToggleBookmark}
+                size={36}
+                active={bookmarked}
+                style={styles.headerIconBtn}
+              />
+              <IconButton
+                icon={<Share2 size={18} color={colors.textPrimary} />}
+                onPress={handleShare}
+                size={36}
+                style={styles.headerIconBtn}
+              />
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={handleClose}
+                style={[styles.closeBtn, { backgroundColor: colors.background, borderColor: colors.border }]}
+              >
+                <X size={18} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <ScrollView
@@ -58,24 +138,81 @@ export const FullRoastModal: React.FC<FullRoastModalProps> = ({
             contentContainerStyle={styles.contentContainer}
             showsVerticalScrollIndicator={false}
           >
-            {/* Meta tags */}
-            <View style={styles.metaRow}>
-              <Badge
-                label={categoryMeta.name}
-                color={categoryAccent}
-                size="md"
+            {/* Hero Image */}
+            <View
+              style={[
+                styles.imageCard,
+                {
+                  backgroundColor: isDark ? '#050505' : '#F1F5F9',
+                  borderColor: colors.cardBorder,
+                },
+              ]}
+            >
+              <Image
+                source={{ uri: imageUri }}
+                style={styles.image}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                onError={() => {
+                  if (!hasLoadError) setHasLoadError(true);
+                }}
               />
             </View>
 
-            {/* Headline */}
-            <Text style={[styles.headline, { color: colors.textPrimary }]}>{article.heading}</Text>
+            {/* Meta tags & Source Tag */}
+            <View style={styles.metaRow}>
+              <Badge label={categoryMeta.name} color={categoryAccent} size="md" />
+              <Text style={[styles.timeText, { color: colors.textMuted }]}>{relativeTime}</Text>
 
-            {/* Paragraphs */}
-            {paragraphs.map((p, idx) => (
-              <Text key={idx} style={[styles.paragraph, { color: colors.textSecondary }]}>
-                {p}
-              </Text>
-            ))}
+              {domain ? (
+                <View style={[styles.domainChip, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <Globe size={11} color={colors.textMuted} />
+                  <Text style={[styles.domainText, { color: colors.textSecondary }]}>{domain}</Text>
+                </View>
+              ) : null}
+            </View>
+
+            {/* Full Untruncated Headline */}
+            <Text style={[styles.headline, { color: colors.textPrimary }]}>
+              {article.heading}
+            </Text>
+
+            {/* Full Story Paragraphs */}
+            <View style={styles.paragraphsContainer}>
+              {paragraphs.map((p, idx) => (
+                <Text key={idx} style={[styles.paragraph, { color: colors.textSecondary }]}>
+                  {p}
+                </Text>
+              ))}
+            </View>
+
+            {/* Read Source Link Button */}
+            {article.link ? (
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => onOpenSourceLink?.(article.link)}
+                style={[
+                  styles.sourceLinkBtn,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <View style={styles.sourceBtnLeft}>
+                  <Globe size={16} color={colors.primary} />
+                  <View>
+                    <Text style={[styles.sourceBtnTitle, { color: colors.textPrimary }]}>
+                      Read Original Coverage
+                    </Text>
+                    <Text style={[styles.sourceBtnSub, { color: colors.textMuted }]}>
+                      {domain || article.link}
+                    </Text>
+                  </View>
+                </View>
+                <ExternalLink size={16} color={colors.primary} />
+              </TouchableOpacity>
+            ) : null}
           </ScrollView>
         </View>
       </SafeAreaView>
@@ -95,43 +232,126 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 10,
     borderBottomWidth: 1,
   },
-  titleRow: {
+  navBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitleContainer: {
+    alignItems: 'center',
+  },
+  headerBrand: {
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+  },
+  headerSub: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
+  headerIconBtn: {},
   closeBtn: {
-    padding: 6,
-    borderRadius: 9999,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 2,
   },
   scrollArea: {
     flex: 1,
   },
   contentContainer: {
-    padding: 16,
-    paddingBottom: 40,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 48,
+  },
+  imageCard: {
+    width: '100%',
+    height: 230,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  image: {
+    width: '100%',
+    height: '100%',
   },
   metaRow: {
-    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 14,
+  },
+  timeText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  domainChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 9999,
+    borderWidth: 1,
+  },
+  domainText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   headline: {
-    fontSize: 24,
+    fontSize: 23,
     fontWeight: '800',
-    lineHeight: 33,
-    marginBottom: 20,
-    letterSpacing: -0.4,
+    lineHeight: 31,
+    marginBottom: 18,
+    letterSpacing: -0.3,
+  },
+  paragraphsContainer: {
+    marginBottom: 24,
   },
   paragraph: {
-    fontSize: 15.5,
-    lineHeight: 26,
+    fontSize: 16,
+    lineHeight: 27,
     marginBottom: 16,
     letterSpacing: 0.1,
+  },
+  sourceLinkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: 8,
+  },
+  sourceBtnLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  sourceBtnTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  sourceBtnSub: {
+    fontSize: 12,
+    marginTop: 2,
   },
 });

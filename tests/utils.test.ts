@@ -49,9 +49,9 @@ describe('Editorial URL & Reading Utilities', () => {
 
 describe('Theme Palettes & Dual-Mode Contrast', () => {
   test('dark and light themes have distinct background and card values', () => {
-    expect(DARK_THEME.colors.background).toBe('#090A0F');
+    expect(DARK_THEME.colors.background).toBe('#000000');
     expect(LIGHT_THEME.colors.background).toBe('#F1F3F6');
-    expect(DARK_THEME.colors.card).toBe('#11141F');
+    expect(DARK_THEME.colors.card).toBe('#0A0A0A');
     expect(LIGHT_THEME.colors.card).toBe('#FFFFFF');
     expect(DARK_THEME.colors.statusBarStyle).toBe('light');
     expect(LIGHT_THEME.colors.statusBarStyle).toBe('dark');

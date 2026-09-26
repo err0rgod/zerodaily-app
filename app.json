@@ -2,7 +2,7 @@
   "expo": {
     "name": "ZeroDaily",
     "slug": "zerodaily",
-    "version": "0.3.0",
+    "version": "0.3.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#090D16"
+      "backgroundColor": "#000000"
     },
     "ios": {
       "supportsTablet": false,
@@ -18,11 +18,11 @@
     },
     "android": {
       "package": "in.zerodaily.app",
-      "versionCode": 10,
+      "versionCode": 11,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#090D16"
+        "backgroundColor": "#000000"
       },
       "permissions": [
         "android.permission.INTERNET",

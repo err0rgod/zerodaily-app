@@ -78,8 +78,8 @@ export const ScreenGlareLoader: React.FC<ScreenGlareLoaderProps> = ({ cardHeight
   });
 
   // Base colors for placeholders
-  const skeletonBase = isDark ? '#1C2030' : '#E2E8F0';
-  const skeletonMuted = isDark ? '#252B40' : '#EDF2F7';
+  const skeletonBase = isDark ? '#18181B' : '#E2E8F0';
+  const skeletonMuted = isDark ? '#27272A' : '#EDF2F7';
 
   // High-visibility luminous glare colors
   const glareColors = isDark

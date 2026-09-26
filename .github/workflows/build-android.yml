@@ -2,8 +2,15 @@ name: Build Android APK (Cloud CI)
 
 on:
   push:
+    tags:
+      - 'v*'
     branches:
       - main
+    paths:
+      - 'package.json'
+  release:
+    types:
+      - published
   workflow_dispatch:
     inputs:
       build_type:
@@ -66,6 +73,10 @@ jobs:
           CUSTOM_TAG="${{ github.event.inputs.release_tag }}"
           if [ -n "$CUSTOM_TAG" ]; then
             TAG="$CUSTOM_TAG"
+          elif [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
           else
             TAG="v$PKG_VERSION"
           fi
