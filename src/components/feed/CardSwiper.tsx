@@ -18,6 +18,7 @@ import { useFeedStore } from '../../store/feedStore';
 import { useTheme } from '../../store/themeStore';
 import { Article, CategoryKey } from '../../types';
 import { NewsCard } from './NewsCard';
+import { NewsCardBack } from './NewsCardBack';
 import { ScreenGlareLoader } from './ScreenGlareLoader';
 
 interface CardSwiperProps {
@@ -61,7 +62,10 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
   const isAnimatingRef = useRef<boolean>(false);
   const gestureDirectionRef = useRef<'none' | 'vertical' | 'horizontal'>('none');
   const panY = useRef(new Animated.Value(0)).current;
-  const panX = useRef(new Animated.Value(0)).current;
+  const flipAnim = useRef(new Animated.Value(0)).current;
+  const [isFlipped, setIsFlipped] = useState<boolean>(false);
+  const isFlippedRef = useRef<boolean>(false);
+  isFlippedRef.current = isFlipped;
   const refreshSpinAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -141,12 +145,14 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
   // Reset animation position synchronously before paint whenever index or category changes
   useLayoutEffect(() => {
     panY.stopAnimation();
-    panX.stopAnimation();
+    flipAnim.stopAnimation();
     panY.setValue(0);
-    panX.setValue(0);
+    flipAnim.setValue(0);
+    setIsFlipped(false);
+    isFlippedRef.current = false;
     isAnimatingRef.current = false;
     gestureDirectionRef.current = 'none';
-  }, [category, currentIndex, panY, panX]);
+  }, [category, currentIndex, panY, flipAnim]);
 
   // Capture container height dynamically
   const handleLayout = (e: LayoutChangeEvent) => {
@@ -157,6 +163,27 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     }
   };
 
+  // Programmatic 3D Card Flip toggle
+  const toggleFlip = useCallback(() => {
+    if (isAnimatingRef.current) return;
+    isAnimatingRef.current = true;
+    const target = isFlippedRef.current ? 0 : 1;
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    }
+    Animated.spring(flipAnim, {
+      toValue: target,
+      friction: 8,
+      tension: 45,
+      useNativeDriver: Platform.OS !== 'web',
+    }).start(() => {
+      const next = target === 1;
+      setIsFlipped(next);
+      isFlippedRef.current = next;
+      isAnimatingRef.current = false;
+    });
+  }, [flipAnim]);
+
   // Programmatic navigation to next card
   const goToNextCard = useCallback(() => {
     const curr = currentIndexRef.current;
@@ -165,6 +192,9 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
 
     if (isAnimatingRef.current || curr >= total - 1) return;
     isAnimatingRef.current = true;
+    flipAnim.setValue(0);
+    setIsFlipped(false);
+    isFlippedRef.current = false;
 
     Animated.timing(panY, {
       toValue: -height,
@@ -174,7 +204,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     }).start(() => {
       setCurrentIndex(curr + 1);
     });
-  }, [getCardHeight, panY, setCurrentIndex]);
+  }, [getCardHeight, panY, setCurrentIndex, flipAnim]);
 
   // Programmatic navigation to previous card
   const goToPrevCard = useCallback(() => {
@@ -189,6 +219,10 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     }
 
     isAnimatingRef.current = true;
+    flipAnim.setValue(0);
+    setIsFlipped(false);
+    isFlippedRef.current = false;
+
     Animated.timing(panY, {
       toValue: height,
       duration: 230,
@@ -197,7 +231,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     }).start(() => {
       setCurrentIndex(curr - 1);
     });
-  }, [getCardHeight, panY, setCurrentIndex, refreshFeed]);
+  }, [getCardHeight, panY, setCurrentIndex, refreshFeed, flipAnim]);
 
   // Web desktop mouse wheel and arrow key shortcuts
   useEffect(() => {
@@ -236,7 +270,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     };
   }, [goToNextCard, goToPrevCard]);
 
-  // Robust PanResponder supporting both vertical card-deck switching & horizontal slide-left full-story preview
+  // Robust PanResponder supporting vertical deck switching & interactive 3D horizontal card flipping (>30% threshold)
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
@@ -246,15 +280,15 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
         if (isAnimatingRef.current) return false;
         // Vertical card swipe when displacement > 12px
         const isVertical = Math.abs(gesture.dy) > 12 && Math.abs(gesture.dy) > Math.abs(gesture.dx) * 0.75;
-        // Horizontal left swipe to view full story & image when displacement < -14px
-        const isHorizontalLeft = gesture.dx < -14 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 0.75;
-        return isVertical || isHorizontalLeft;
+        // Horizontal left or right swipe to flip card when displacement > 12px
+        const isHorizontal = Math.abs(gesture.dx) > 12 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 0.75;
+        return isVertical || isHorizontal;
       },
       onMoveShouldSetPanResponderCapture: () => false,
 
       onPanResponderGrant: () => {
         panY.stopAnimation();
-        panX.stopAnimation();
+        flipAnim.stopAnimation();
         isAnimatingRef.current = false;
         gestureDirectionRef.current = 'none';
       },
@@ -265,7 +299,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
         if (gestureDirectionRef.current === 'none') {
           if (Math.abs(gesture.dy) > Math.abs(gesture.dx)) {
             gestureDirectionRef.current = 'vertical';
-          } else if (gesture.dx < 0) {
+          } else if (Math.abs(gesture.dx) > 0) {
             gestureDirectionRef.current = 'horizontal';
           }
         }
@@ -273,8 +307,18 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
         if (gestureDirectionRef.current === 'vertical') {
           panY.setValue(gesture.dy);
         } else if (gestureDirectionRef.current === 'horizontal') {
-          const clamped = Math.max(gesture.dx, -windowDim.width * 0.65);
-          panX.setValue(clamped);
+          // Interactive 3D flip tracking as user drags finger left or right
+          const screenWidth = windowDim.width;
+          const dragDist = Math.abs(gesture.dx);
+          const dragProgress = Math.min(dragDist / (screenWidth * 0.7), 1);
+
+          if (isFlippedRef.current) {
+            // Currently at Back face: dragging moves back towards Front (0)
+            flipAnim.setValue(Math.max(1 - dragProgress, 0));
+          } else {
+            // Currently at Front face: dragging moves towards Back (1)
+            flipAnim.setValue(dragProgress);
+          }
         }
       },
 
@@ -282,24 +326,49 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
         if (isAnimatingRef.current) return;
 
         if (gestureDirectionRef.current === 'horizontal') {
-          const isLeftSlide = gesture.dx < -55 || gesture.vx < -0.3;
-          if (isLeftSlide) {
-            const article = articlesRef.current[currentIndexRef.current];
-            if (article) {
-              if (Platform.OS !== 'web') {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-              }
-              onOpenFullRoast(article);
+          const screenWidth = windowDim.width;
+          const dragFraction = Math.abs(gesture.dx) / screenWidth;
+          // Requirement: "sliding should not be fully automated so that the user only flips 10% and the card flips it should be more than 30%"
+          const thresholdPassed = dragFraction >= 0.30 || Math.abs(gesture.vx) > 0.65;
+
+          isAnimatingRef.current = true;
+          if (isFlippedRef.current) {
+            // Was at back: flip to front if threshold passed (>30%), else stay at back (1)
+            const target = thresholdPassed ? 0 : 1;
+            if (thresholdPassed && Platform.OS !== 'web') {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
             }
+            Animated.spring(flipAnim, {
+              toValue: target,
+              friction: 8,
+              tension: 45,
+              useNativeDriver: Platform.OS !== 'web',
+            }).start(() => {
+              const nextFlipped = target === 1;
+              setIsFlipped(nextFlipped);
+              isFlippedRef.current = nextFlipped;
+              isAnimatingRef.current = false;
+              gestureDirectionRef.current = 'none';
+            });
+          } else {
+            // Was at front: flip to back if threshold passed (>30%), else snap back to front (0)
+            const target = thresholdPassed ? 1 : 0;
+            if (thresholdPassed && Platform.OS !== 'web') {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+            }
+            Animated.spring(flipAnim, {
+              toValue: target,
+              friction: 8,
+              tension: 45,
+              useNativeDriver: Platform.OS !== 'web',
+            }).start(() => {
+              const nextFlipped = target === 1;
+              setIsFlipped(nextFlipped);
+              isFlippedRef.current = nextFlipped;
+              isAnimatingRef.current = false;
+              gestureDirectionRef.current = 'none';
+            });
           }
-          Animated.spring(panX, {
-            toValue: 0,
-            friction: 7,
-            tension: 50,
-            useNativeDriver: Platform.OS !== 'web',
-          }).start(() => {
-            gestureDirectionRef.current = 'none';
-          });
           return;
         }
 
@@ -314,6 +383,9 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
         if (isUpSwipe && curr < total - 1) {
           // Swipe up: Active card slides away, next card underneath scales up
           isAnimatingRef.current = true;
+          flipAnim.setValue(0);
+          setIsFlipped(false);
+          isFlippedRef.current = false;
           Animated.timing(panY, {
             toValue: -height,
             duration: 220,
@@ -325,6 +397,9 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
         } else if (isDownSwipe && curr > 0) {
           // Swipe down: Active card slides down, previous card underneath scales up
           isAnimatingRef.current = true;
+          flipAnim.setValue(0);
+          setIsFlipped(false);
+          isFlippedRef.current = false;
           Animated.timing(panY, {
             toValue: height,
             duration: 220,
@@ -369,10 +444,10 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
           tension: 50,
           useNativeDriver: Platform.OS !== 'web',
         }).start();
-        Animated.spring(panX, {
-          toValue: 0,
-          friction: 7,
-          tension: 50,
+        Animated.spring(flipAnim, {
+          toValue: isFlippedRef.current ? 1 : 0,
+          friction: 8,
+          tension: 45,
           useNativeDriver: Platform.OS !== 'web',
         }).start();
       },
@@ -416,53 +491,54 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
   const orderedSlots = [prevSlot, nextSlot, activeSlot];
 
   // Deck Layer Transformations:
-  // 1. Next Card Underneath: scales from 0.94 up to 1.0, translates Y from 14px to 0px
+  // 1. Next Card Underneath: scales from 0.96 up to 1.0, translates Y from 8px to 0px
   const nextCardScale = panY.interpolate({
     inputRange: [-height, 0],
-    outputRange: [1.0, 0.94],
+    outputRange: [1.0, 0.96],
     extrapolate: 'clamp',
   });
 
   const nextCardTranslateY = panY.interpolate({
     inputRange: [-height, 0],
-    outputRange: [0, 14],
+    outputRange: [0, 8],
     extrapolate: 'clamp',
   });
 
+  // Next card is VISIBLE underneath so that flipping reveals the card below!
   const nextCardOpacity = panY.interpolate({
-    inputRange: [-height, 0, 0.001],
-    outputRange: [1.0, 0.92, 0],
+    inputRange: [-height, 0],
+    outputRange: [1.0, 0.98],
     extrapolate: 'clamp',
   });
 
   const nextCardDimmer = panY.interpolate({
     inputRange: [-height, 0],
-    outputRange: [0, 0.2],
+    outputRange: [0, 0.15],
     extrapolate: 'clamp',
   });
 
-  // 2. Previous Card Underneath (when swiping down to go back): scales from 0.94 up to 1.0
+  // 2. Previous Card Underneath (when swiping down to go back): scales from 0.96 up to 1.0
   const prevCardScale = panY.interpolate({
     inputRange: [0, height],
-    outputRange: [0.94, 1.0],
+    outputRange: [0.96, 1.0],
     extrapolate: 'clamp',
   });
 
   const prevCardTranslateY = panY.interpolate({
     inputRange: [0, height],
-    outputRange: [14, 0],
+    outputRange: [8, 0],
     extrapolate: 'clamp',
   });
 
   const prevCardOpacity = panY.interpolate({
     inputRange: [-0.001, 0, height],
-    outputRange: [0, 0.92, 1.0],
+    outputRange: [0, 0.98, 1.0],
     extrapolate: 'clamp',
   });
 
   const prevCardDimmer = panY.interpolate({
     inputRange: [0, height],
-    outputRange: [0.2, 0],
+    outputRange: [0.15, 0],
     extrapolate: 'clamp',
   });
 
@@ -478,6 +554,27 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
       currentIndex === 0 ? 90 : height,
     ],
     extrapolate: 'clamp',
+  });
+
+  // 4. 3D Flip Card Rotations (Perspective 1200 with backfaceVisibility)
+  const frontRotateY = flipAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg'],
+  });
+
+  const backRotateY = flipAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['180deg', '360deg'],
+  });
+
+  const frontOpacity = flipAnim.interpolate({
+    inputRange: [0, 0.49, 0.5, 1],
+    outputRange: [1, 1, 0, 0],
+  });
+
+  const backOpacity = flipAnim.interpolate({
+    inputRange: [0, 0.5, 0.51, 1],
+    outputRange: [0, 0, 1, 1],
   });
 
   // Pull-to-refresh badge interpolation
@@ -534,7 +631,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
           const isPrev = slotIndex === prevSlot;
 
           const layerTransform = isCurrent
-            ? [{ translateY: activeCardTranslateY }, { translateX: panX }]
+            ? [{ translateY: activeCardTranslateY }]
             : isNext
             ? [{ translateY: nextCardTranslateY }, { scale: nextCardScale }]
             : [{ translateY: prevCardTranslateY }, { scale: prevCardScale }];
@@ -562,14 +659,68 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
               ]}
               pointerEvents={isCurrent ? 'auto' : 'none'}
             >
-              <NewsCard
-                key={article.id}
-                article={article}
-                cardHeight={cardRenderHeight}
-                onOpenFullRoast={onOpenFullRoast}
-                onOpenSourceLink={onOpenSourceLink}
-                onOpenImageViewer={onOpenImageViewer}
-              />
+              {isCurrent ? (
+                <View style={StyleSheet.absoluteFill}>
+                  {/* FRONT FACE (Main Card with Image) */}
+                  <Animated.View
+                    style={[
+                      StyleSheet.absoluteFill,
+                      {
+                        opacity: frontOpacity,
+                        transform: [
+                          { perspective: 1200 },
+                          { rotateY: frontRotateY },
+                        ],
+                        backfaceVisibility: 'hidden',
+                      },
+                    ]}
+                    pointerEvents={isFlipped ? 'none' : 'auto'}
+                  >
+                    <NewsCard
+                      key={`front-${article.id}`}
+                      article={article}
+                      cardHeight={cardRenderHeight}
+                      onOpenFullRoast={onOpenFullRoast}
+                      onOpenSourceLink={onOpenSourceLink}
+                      onOpenImageViewer={onOpenImageViewer}
+                      onFlip={toggleFlip}
+                    />
+                  </Animated.View>
+
+                  {/* BACK FACE (Summary & Heading, NO IMAGE) */}
+                  <Animated.View
+                    style={[
+                      StyleSheet.absoluteFill,
+                      {
+                        opacity: backOpacity,
+                        transform: [
+                          { perspective: 1200 },
+                          { rotateY: backRotateY },
+                        ],
+                        backfaceVisibility: 'hidden',
+                      },
+                    ]}
+                    pointerEvents={isFlipped ? 'auto' : 'none'}
+                  >
+                    <NewsCardBack
+                      key={`back-${article.id}`}
+                      article={article}
+                      cardHeight={cardRenderHeight}
+                      onOpenSourceLink={onOpenSourceLink}
+                      onFlip={toggleFlip}
+                    />
+                  </Animated.View>
+                </View>
+              ) : (
+                <NewsCard
+                  key={article.id}
+                  article={article}
+                  cardHeight={cardRenderHeight}
+                  onOpenFullRoast={onOpenFullRoast}
+                  onOpenSourceLink={onOpenSourceLink}
+                  onOpenImageViewer={onOpenImageViewer}
+                />
+              )}
               {dimmer && (
                 <Animated.View
                   style={[

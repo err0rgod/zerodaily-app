@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Bookmark, ExternalLink, Globe, Share2 } from 'lucide-react-native';
+import { Bookmark, ExternalLink, Globe, RotateCcw, Share2 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Platform, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { CATEGORIES, DEFAULT_FALLBACK_IMAGE, getDynamicFallbackImage } from '../../constants/categories';
@@ -19,6 +19,7 @@ interface NewsCardProps {
   onOpenFullRoast?: (article: Article) => void;
   onOpenSourceLink: (url: string) => void;
   onOpenImageViewer?: (imageUri: string, heading: string, category: CategoryKey) => void;
+  onFlip?: () => void;
 }
 
 export const NewsCard: React.FC<NewsCardProps> = React.memo(({
@@ -27,6 +28,7 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
   onOpenFullRoast,
   onOpenSourceLink,
   onOpenImageViewer,
+  onFlip,
 }) => {
   const { colors, isDark } = useTheme();
   const bookmarked = useBookmarkStore(React.useCallback((s) => s.bookmarks.some((b) => b.id === article.id), [article.id]));
@@ -120,14 +122,30 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
             style={styles.gradientOverlay}
           />
 
-          {/* Floating Metadata Pill Row: ZERODAILY brand only + Reading metrics */}
+          {/* Floating Metadata Pill Row: ZERODAILY brand only + Reading metrics + Flip */}
           <View style={styles.overlayRow}>
             <View style={styles.brandBadge}>
               <Text style={styles.brandTitle} maxFontSizeMultiplier={1.15}>ZERODAILY</Text>
             </View>
 
-            <View style={styles.metaChip}>
-              <Text style={styles.metaChipText} maxFontSizeMultiplier={1.15}>{relativeTime}</Text>
+            <View style={styles.overlayRight}>
+              <View style={styles.metaChip}>
+                <Text style={styles.metaChipText} maxFontSizeMultiplier={1.15}>{relativeTime}</Text>
+              </View>
+
+              <TouchableOpacity
+                activeOpacity={0.75}
+                onPress={() => {
+                  if (Platform.OS !== 'web') {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                  }
+                  onFlip?.();
+                }}
+                style={styles.flipChip}
+              >
+                <RotateCcw size={10} color="#FFFFFF" />
+                <Text style={styles.flipChipText}>Flip</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </TouchableOpacity>
@@ -156,8 +174,9 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
             </Text>
 
             <View style={styles.swipeLeftCue}>
+              <RotateCcw size={11} color={colors.textMuted} />
               <Text style={[styles.swipeLeftText, { color: colors.textMuted }]}>
-                Swipe left for full story & image →
+                Slide left or right to flip card ⇄
               </Text>
             </View>
           </TouchableOpacity>
@@ -297,6 +316,25 @@ const styles = StyleSheet.create({
     color: '#CBD5E1',
     fontSize: 10,
     fontWeight: '600',
+  },
+  overlayRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  flipChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3.5,
+    backgroundColor: 'rgba(16, 185, 129, 0.85)',
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    borderRadius: 9999,
+  },
+  flipChipText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
   },
   bodyContainer: {
     flex: 1,
