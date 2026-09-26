@@ -1,19 +1,24 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { RotateCcw, X, ZoomIn, ZoomOut } from 'lucide-react-native';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Animated,
-  Dimensions,
   Modal,
-  PanResponder,
   Platform,
   StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CATEGORIES } from '../../constants/categories';
 import { CategoryKey } from '../../types';
@@ -29,6 +34,12 @@ interface ImageViewerModalProps {
 const MIN_SCALE = 1.0;
 const MAX_SCALE = 4.0;
 const DOUBLE_TAP_SCALE = 2.4;
+const ZOOMED_THRESHOLD = 1.05;
+const SPRING = { damping: 18, stiffness: 180, mass: 0.9 } as const;
+
+const fireHaptic = () => {
+  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+};
 
 export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   visible,
@@ -38,174 +49,145 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   onClose,
 }) => {
   const insets = useSafeAreaInsets();
-  const [dimensions, setDimensions] = useState(() => Dimensions.get('window'));
+  // Live window size — read on every render, so rotation can never leave the
+  // pan clamps working off a stale viewport.
+  const { width: winW, height: winH } = useWindowDimensions();
 
-  // Animated values for scale and pan offset
-  const scale = useRef(new Animated.Value(1)).current;
-  const panX = useRef(new Animated.Value(0)).current;
-  const panY = useRef(new Animated.Value(0)).current;
+  const scale = useSharedValue(1);
+  const tx = useSharedValue(0);
+  const ty = useSharedValue(0);
+  const savedScale = useSharedValue(1);
+  const savedTx = useSharedValue(0);
+  const savedTy = useSharedValue(0);
 
-  // Track numerical values in refs for gesture math
-  const currentScale = useRef<number>(1);
-  const currentPanX = useRef<number>(0);
-  const currentPanY = useRef<number>(0);
+  // Drives the Reset pill. Previously this read `currentScale.current` during
+  // render, which never triggered a re-render, so the pill never appeared.
+  const [isZoomed, setIsZoomed] = useState<boolean>(false);
 
-  // Pinch gesture tracking
-  const initialPinchDist = useRef<number>(0);
-  const initialScaleOnPinch = useRef<number>(1);
-
-  // Double tap detection
-  const lastTapTime = useRef<number>(0);
-
-  // Listen to dimension changes
   useEffect(() => {
-    const sub = Dimensions.addEventListener('change', ({ window }) => {
-      setDimensions(window);
-    });
-    return () => sub?.remove();
-  }, []);
+    if (!visible) return;
+    scale.value = 1;
+    tx.value = 0;
+    ty.value = 0;
+    savedScale.value = 1;
+    savedTx.value = 0;
+    savedTy.value = 0;
+    setIsZoomed(false);
+  }, [visible, imageUri, scale, tx, ty, savedScale, savedTx, savedTy]);
 
-  // Sync animated values with state
-  useEffect(() => {
-    const idScale = scale.addListener(({ value }) => {
-      currentScale.current = value;
-    });
-    const idPanX = panX.addListener(({ value }) => {
-      currentPanX.current = value;
-    });
-    const idPanY = panY.addListener(({ value }) => {
-      currentPanY.current = value;
-    });
+  const animateTo = useCallback(
+    (nextScale: number, nextTx: number, nextTy: number) => {
+      scale.value = withSpring(nextScale, SPRING);
+      tx.value = withSpring(nextTx, SPRING);
+      ty.value = withSpring(nextTy, SPRING);
+      savedScale.value = nextScale;
+      savedTx.value = nextTx;
+      savedTy.value = nextTy;
+      setIsZoomed(nextScale > ZOOMED_THRESHOLD);
+    },
+    [scale, tx, ty, savedScale, savedTx, savedTy]
+  );
 
-    return () => {
-      scale.removeListener(idScale);
-      panX.removeListener(idPanX);
-      panY.removeListener(idPanY);
-    };
-  }, [scale, panX, panY]);
-
-  // Reset transforms whenever modal opens or imageUri changes
   const resetTransform = useCallback(() => {
-    Animated.parallel([
-      Animated.spring(scale, { toValue: 1, friction: 7, tension: 50, useNativeDriver: Platform.OS !== 'web' }),
-      Animated.spring(panX, { toValue: 0, friction: 7, tension: 50, useNativeDriver: Platform.OS !== 'web' }),
-      Animated.spring(panY, { toValue: 0, friction: 7, tension: 50, useNativeDriver: Platform.OS !== 'web' }),
-    ]).start();
-  }, [scale, panX, panY]);
+    animateTo(1, 0, 0);
+  }, [animateTo]);
 
-  useEffect(() => {
-    if (visible) {
-      scale.setValue(1);
-      panX.setValue(0);
-      panY.setValue(0);
-      currentScale.current = 1;
-      currentPanX.current = 0;
-      currentPanY.current = 0;
-    }
-  }, [visible, imageUri, scale, panX, panY]);
+  // Desktop web zoom buttons
+  const handleZoomIn = useCallback(() => {
+    const next = Math.min(savedScale.value + 0.6, MAX_SCALE);
+    animateTo(next, savedTx.value, savedTy.value);
+  }, [animateTo, savedScale, savedTx, savedTy]);
 
-  // Double tap handler
-  const handleDoubleTap = useCallback(() => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    }
-
-    if (currentScale.current > 1.2) {
+  const handleZoomOut = useCallback(() => {
+    const next = Math.max(savedScale.value - 0.6, MIN_SCALE);
+    if (next <= ZOOMED_THRESHOLD) {
       resetTransform();
     } else {
-      Animated.parallel([
-        Animated.spring(scale, {
-          toValue: DOUBLE_TAP_SCALE,
-          friction: 7,
-          tension: 45,
-          useNativeDriver: Platform.OS !== 'web',
-        }),
-        Animated.spring(panX, { toValue: 0, friction: 7, tension: 45, useNativeDriver: Platform.OS !== 'web' }),
-        Animated.spring(panY, { toValue: 0, friction: 7, tension: 45, useNativeDriver: Platform.OS !== 'web' }),
-      ]).start();
+      animateTo(next, savedTx.value, savedTy.value);
     }
-  }, [resetTransform, scale, panX, panY]);
+  }, [animateTo, resetTransform, savedScale, savedTx, savedTy]);
 
-  // Zoom button triggers for desktop web
-  const handleZoomIn = () => {
-    const next = Math.min(currentScale.current + 0.6, MAX_SCALE);
-    Animated.spring(scale, { toValue: next, friction: 7, tension: 45, useNativeDriver: Platform.OS !== 'web' }).start();
-  };
+  /* ---------------- gestures (UI thread) ---------------- */
 
-  const handleZoomOut = () => {
-    const next = Math.max(currentScale.current - 0.6, MIN_SCALE);
-    if (next <= 1.05) {
-      resetTransform();
-    } else {
-      Animated.spring(scale, { toValue: next, friction: 7, tension: 45, useNativeDriver: Platform.OS !== 'web' }).start();
-    }
-  };
-
-  // PanResponder for pinch-to-zoom and pan navigation
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-
-      onPanResponderGrant: (evt) => {
-        const now = Date.now();
-        // Check for double tap (within 320ms)
-        if (now - lastTapTime.current < 320) {
-          handleDoubleTap();
-          lastTapTime.current = 0;
-          return;
-        }
-        lastTapTime.current = now;
-
-        const touches = evt.nativeEvent.touches;
-        if (touches.length === 2) {
-          // Pinch start: calculate initial distance between two touch points
-          const dx = touches[0].pageX - touches[1].pageX;
-          const dy = touches[0].pageY - touches[1].pageY;
-          initialPinchDist.current = Math.sqrt(dx * dx + dy * dy);
-          initialScaleOnPinch.current = currentScale.current;
-        }
-      },
-
-      onPanResponderMove: (evt, gesture) => {
-        const touches = evt.nativeEvent.touches;
-
-        if (touches && touches.length === 2 && initialPinchDist.current > 0) {
-          // Two-finger pinch gesture
-          const dx = touches[0].pageX - touches[1].pageX;
-          const dy = touches[0].pageY - touches[1].pageY;
-          const currentDist = Math.sqrt(dx * dx + dy * dy);
-          const factor = currentDist / initialPinchDist.current;
-          const targetScale = Math.min(Math.max(initialScaleOnPinch.current * factor, 0.8), MAX_SCALE);
-          scale.setValue(targetScale);
-        } else if (currentScale.current > 1.05) {
-          // Single-finger pan when zoomed in
-          const maxPanX = ((currentScale.current - 1) * dimensions.width) / 2;
-          const maxPanY = ((currentScale.current - 1) * dimensions.height) / 2;
-
-          const nextX = Math.min(Math.max(currentPanX.current + gesture.dx * 0.4, -maxPanX), maxPanX);
-          const nextY = Math.min(Math.max(currentPanY.current + gesture.dy * 0.4, -maxPanY), maxPanY);
-
-          panX.setValue(nextX);
-          panY.setValue(nextY);
-        }
-      },
-
-      onPanResponderRelease: () => {
-        initialPinchDist.current = 0;
-
-        // Snap back if pinched below 1x
-        if (currentScale.current < 1.05) {
-          resetTransform();
-        }
-      },
+  const pinchGesture = Gesture.Pinch()
+    .onStart(() => {
+      'worklet';
+      savedScale.value = scale.value;
     })
-  ).current;
+    .onUpdate((e) => {
+      'worklet';
+      scale.value = Math.min(Math.max(savedScale.value * e.scale, MIN_SCALE), MAX_SCALE);
+    })
+    .onEnd(() => {
+      'worklet';
+      // Settle at 1x if the user pinched back down, and report zoom state once
+      // rather than on every frame.
+      if (scale.value <= ZOOMED_THRESHOLD) {
+        scale.value = withSpring(1, SPRING);
+        tx.value = withSpring(0, SPRING);
+        ty.value = withSpring(0, SPRING);
+        savedScale.value = 1;
+        savedTx.value = 0;
+        savedTy.value = 0;
+        runOnJS(setIsZoomed)(false);
+      } else {
+        savedScale.value = scale.value;
+        runOnJS(setIsZoomed)(true);
+      }
+    });
+
+  const panGesture = Gesture.Pan()
+    .maxPointers(1)
+    .onStart(() => {
+      'worklet';
+      savedTx.value = tx.value;
+      savedTy.value = ty.value;
+    })
+    .onUpdate((e) => {
+      'worklet';
+      if (scale.value <= ZOOMED_THRESHOLD) return;
+      const maxX = ((scale.value - 1) * winW) / 2;
+      const maxY = ((scale.value - 1) * winH) / 2;
+      tx.value = Math.min(Math.max(savedTx.value + e.translationX, -maxX), maxX);
+      ty.value = Math.min(Math.max(savedTy.value + e.translationY, -maxY), maxY);
+    });
+
+  const doubleTapGesture = Gesture.Tap()
+    .numberOfTaps(2)
+    .maxDuration(280)
+    .onEnd((_e, success) => {
+      'worklet';
+      if (!success) return;
+      const zoomed = scale.value > 1.2;
+      runOnJS(fireHaptic)();
+      if (zoomed) {
+        scale.value = withSpring(1, SPRING);
+        tx.value = withSpring(0, SPRING);
+        ty.value = withSpring(0, SPRING);
+        savedScale.value = 1;
+        savedTx.value = 0;
+        savedTy.value = 0;
+        runOnJS(setIsZoomed)(false);
+      } else {
+        scale.value = withSpring(DOUBLE_TAP_SCALE, SPRING);
+        savedScale.value = DOUBLE_TAP_SCALE;
+        runOnJS(setIsZoomed)(true);
+      }
+    });
+
+  // The tap keeps priority; the pinch/pan pair runs simultaneously.
+  const gesture = Gesture.Exclusive(
+    doubleTapGesture,
+    Gesture.Simultaneous(pinchGesture, panGesture)
+  );
+
+  const imageStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }, { translateX: tx.value }, { translateY: ty.value }],
+  }));
 
   if (!visible || !imageUri) return null;
 
   const categoryMeta = CATEGORIES[category] || CATEGORIES.all;
-  const isZoomed = currentScale.current > 1.1;
 
   return (
     <Modal
@@ -217,35 +199,35 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     >
       <StatusBar barStyle="light-content" backgroundColor="#000000" />
       <View style={styles.container}>
-        {/* TOP HEADER CONTROLS (Safe Area Insets) */}
+        {/* Top controls, inset past the status bar */}
         <View style={[styles.topHeader, { top: Math.max(insets.top, 16) }]}>
-          {/* Category Chip */}
           <View style={[styles.catBadge, { borderColor: `${categoryMeta.accentColor}60` }]}>
             <Text style={[styles.catText, { color: categoryMeta.accentColor }]}>
               {categoryMeta.name.toUpperCase()}
             </Text>
           </View>
 
-          {/* Action Buttons Row */}
           <View style={styles.topActions}>
             {isZoomed && (
               <TouchableOpacity
                 activeOpacity={0.7}
                 onPress={resetTransform}
                 style={styles.actionPill}
+                accessibilityRole="button"
+                accessibilityLabel="Reset zoom"
               >
                 <RotateCcw size={15} color="#FFFFFF" />
                 <Text style={styles.actionPillText}>Reset</Text>
               </TouchableOpacity>
             )}
 
-            {/* Desktop Web Zoom Buttons */}
             {Platform.OS === 'web' && (
               <View style={styles.webZoomRow}>
                 <TouchableOpacity
                   activeOpacity={0.7}
                   onPress={handleZoomOut}
                   style={styles.circleBtn}
+                  accessibilityLabel="Zoom out"
                 >
                   <ZoomOut size={17} color="#FFFFFF" />
                 </TouchableOpacity>
@@ -253,54 +235,51 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                   activeOpacity={0.7}
                   onPress={handleZoomIn}
                   style={styles.circleBtn}
+                  accessibilityLabel="Zoom in"
                 >
                   <ZoomIn size={17} color="#FFFFFF" />
                 </TouchableOpacity>
               </View>
             )}
 
-            {/* Close Button (X) */}
             <TouchableOpacity
               activeOpacity={0.7}
               onPress={onClose}
               style={styles.closeBtn}
-              accessibilityLabel="Close Image Viewer"
+              accessibilityRole="button"
+              accessibilityLabel="Close image viewer"
             >
               <X size={22} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* FULLSCREEN IMAGE CANVAS WITH PINCH & PAN GESTURES */}
-        <View style={styles.canvas} {...panResponder.panHandlers}>
-          <Animated.View
-            style={[
-              styles.imageWrapper,
-              {
-                transform: [{ scale }, { translateX: panX }, { translateY: panY }],
-              },
-            ]}
-          >
-            <Image
-              source={{ uri: imageUri }}
-              style={styles.fullImage}
-              contentFit="contain"
-              transition={200}
-              cachePolicy="memory-disk"
-            />
-          </Animated.View>
-        </View>
+        {/* Image canvas */}
+        <GestureDetector gesture={gesture}>
+          <View style={styles.canvas}>
+            <Animated.View style={[styles.imageWrapper, imageStyle]}>
+              <Image
+                source={{ uri: imageUri }}
+                style={styles.fullImage}
+                contentFit="contain"
+                transition={200}
+                cachePolicy="memory-disk"
+              />
+            </Animated.View>
+          </View>
+        </GestureDetector>
 
-        {/* BOTTOM METADATA & HINT FOOTER */}
-        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 18) }]}>
+        {/* Bottom metadata */}
+        <View
+          pointerEvents="none"
+          style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 18) }]}
+        >
           {heading ? (
             <Text style={styles.headingText} numberOfLines={2}>
               {heading}
             </Text>
           ) : null}
-          <Text style={styles.hintText}>
-            Double-tap or pinch to zoom • Drag to pan details
-          </Text>
+          <Text style={styles.hintText}>Pinch or double-tap to zoom</Text>
         </View>
       </View>
     </Modal>
@@ -332,11 +311,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 6,
   },
-  catDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
   catText: {
     fontSize: 10.5,
     fontWeight: '800',
@@ -367,9 +341,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   circleBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: 'rgba(255, 255, 255, 0.18)',
     alignItems: 'center',
     justifyContent: 'center',

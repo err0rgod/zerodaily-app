@@ -6,13 +6,13 @@ import {
   ActivityIndicator,
   Modal,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CATEGORY_LIST } from '../../constants/categories';
 import { registerForPushNotificationsAsync } from '../../services/notificationService';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -30,6 +30,7 @@ interface CategoryOnboardingModalProps {
 
 export const CategoryOnboardingModal: React.FC<CategoryOnboardingModalProps> = ({ onComplete }) => {
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const setInitialCategories = useSettingsStore((s) => s.setInitialCategories);
 
   const [visible, setVisible] = useState<boolean>(false);
@@ -134,7 +135,15 @@ export const CategoryOnboardingModal: React.FC<CategoryOnboardingModalProps> = (
         // Prevent accidental hardware back dismissal on Android without choosing
       }}
     >
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      {/* statusBarTranslucent draws this modal under the status bar, so the
+          top inset has to be applied here — RN's SafeAreaView does not account
+          for a translucent Android status bar. */}
+      <View
+        style={[
+          styles.safeArea,
+          { backgroundColor: colors.background, paddingTop: insets.top },
+        ]}
+      >
         <View style={styles.container}>
           {/* Header Section */}
           <View style={styles.header}>
@@ -219,7 +228,8 @@ export const CategoryOnboardingModal: React.FC<CategoryOnboardingModalProps> = (
                           fontWeight: isSelected ? '700' : '600',
                         },
                       ]}
-                      numberOfLines={1}
+                      numberOfLines={2}
+                      maxFontSizeMultiplier={1.2}
                     >
                       {cat.name}
                     </Text>
@@ -227,6 +237,7 @@ export const CategoryOnboardingModal: React.FC<CategoryOnboardingModalProps> = (
                     <Text
                       style={[styles.boxDescription, { color: colors.textMuted }]}
                       numberOfLines={2}
+                      maxFontSizeMultiplier={1.15}
                     >
                       {cat.description}
                     </Text>
@@ -237,7 +248,16 @@ export const CategoryOnboardingModal: React.FC<CategoryOnboardingModalProps> = (
           </ScrollView>
 
           {/* Bottom Action Footer */}
-          <View style={[styles.footer, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
+          <View
+            style={[
+              styles.footer,
+              {
+                borderTopColor: colors.border,
+                backgroundColor: colors.background,
+                paddingBottom: Math.max(insets.bottom, 14),
+              },
+            ]}
+          >
             <View style={styles.guaranteeRow}>
               <Bell size={13} color={colors.textMuted} />
               <Text style={[styles.guaranteeText, { color: colors.textMuted }]}>
@@ -267,7 +287,7 @@ export const CategoryOnboardingModal: React.FC<CategoryOnboardingModalProps> = (
             </TouchableOpacity>
           </View>
         </View>
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 };

@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { Bookmark, ChevronLeft, ExternalLink, Globe, Share2, X } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Platform,
@@ -36,8 +36,11 @@ export const FullRoastModal: React.FC<FullRoastModalProps> = ({
   onOpenSourceLink,
 }) => {
   const { colors, isDark } = useTheme();
+  const articleId = article?.id;
   const bookmarked = useBookmarkStore(
-    React.useCallback((s) => (article ? s.bookmarks.some((b) => b.id === article.id) : false), [article?.id])
+    useCallback((s) => (articleId ? s.bookmarks.some((b) => b.id === articleId) : false), [
+      articleId,
+    ])
   );
   const toggleBookmark = useBookmarkStore((s) => s.toggleBookmark);
 
@@ -45,39 +48,51 @@ export const FullRoastModal: React.FC<FullRoastModalProps> = ({
 
   useEffect(() => {
     setHasLoadError(false);
-  }, [article?.id, article?.image_url]);
+  }, [articleId, article?.image_url]);
 
-  if (!article) return null;
+  // Derived values are memoised so the summary is not re-split (and the whole
+  // body re-rendered) on every unrelated parent render.
+  const derived = useMemo(() => {
+    if (!article) return null;
+    const categoryMeta = CATEGORIES[article.category] || CATEGORIES.all;
+    const isValidUrl = Boolean(article.image_url && article.image_url.trim().length > 0);
+    return {
+      categoryMeta,
+      categoryAccent: colors[article.category] || categoryMeta.accentColor,
+      imageUri:
+        isValidUrl && !hasLoadError
+          ? article.image_url
+          : getDynamicFallbackImage(article.id, article.category),
+      domain: extractDomain(article.link),
+      relativeTime: formatRelativeTime(article.published_at),
+      paragraphs: (article.fullSummary || article.shortSummary || '')
+        .split('\n\n')
+        .filter((p) => p.trim().length > 0),
+    };
+  }, [article, colors, hasLoadError]);
 
-  const categoryMeta = CATEGORIES[article.category] || CATEGORIES.all;
-  const categoryAccent = colors[article.category] || categoryMeta.accentColor;
-  const dynamicFallback = getDynamicFallbackImage(article.id, article.category);
-  const isValidUrl = Boolean(article.image_url && article.image_url.trim().length > 0);
-  const imageUri = isValidUrl && !hasLoadError ? article.image_url : dynamicFallback;
-
-  const domain = extractDomain(article.link);
-  const relativeTime = formatRelativeTime(article.published_at);
-  const paragraphs = (article.fullSummary || article.shortSummary || '')
-    .split('\n\n')
-    .filter((p) => p.trim().length > 0);
-
-  const handleToggleBookmark = async () => {
+  const handleToggleBookmark = useCallback(async () => {
+    if (!article) return;
     if (Platform.OS !== 'web') {
       Haptics.selectionAsync().catch(() => {});
     }
     await toggleBookmark(article);
-  };
+  }, [toggleBookmark, article]);
 
-  const handleShare = () => {
-    shareArticle(article);
-  };
+  const handleShare = useCallback(() => {
+    if (article) shareArticle(article);
+  }, [article]);
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     if (Platform.OS !== 'web') {
       Haptics.selectionAsync().catch(() => {});
     }
     onClose();
-  };
+  }, [onClose]);
+
+  if (!article || !derived) return null;
+
+  const { categoryMeta, categoryAccent, imageUri, domain, relativeTime, paragraphs } = derived;
 
   return (
     <Modal
@@ -94,6 +109,9 @@ export const FullRoastModal: React.FC<FullRoastModalProps> = ({
               activeOpacity={0.7}
               onPress={handleClose}
               style={[styles.navBtn, { backgroundColor: colors.background, borderColor: colors.border }]}
+              accessibilityRole="button"
+              accessibilityLabel="Back to feed"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <ChevronLeft size={20} color={colors.textPrimary} />
             </TouchableOpacity>
@@ -116,17 +134,22 @@ export const FullRoastModal: React.FC<FullRoastModalProps> = ({
                 size={36}
                 active={bookmarked}
                 style={styles.headerIconBtn}
+                accessibilityLabel={bookmarked ? 'Remove bookmark' : 'Bookmark story'}
               />
               <IconButton
                 icon={<Share2 size={18} color={colors.textPrimary} />}
                 onPress={handleShare}
                 size={36}
                 style={styles.headerIconBtn}
+                accessibilityLabel="Share story"
               />
               <TouchableOpacity
                 activeOpacity={0.7}
                 onPress={handleClose}
                 style={[styles.closeBtn, { backgroundColor: colors.background, borderColor: colors.border }]}
+                accessibilityRole="button"
+                accessibilityLabel="Close full story"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <X size={18} color={colors.textPrimary} />
               </TouchableOpacity>
@@ -153,6 +176,7 @@ export const FullRoastModal: React.FC<FullRoastModalProps> = ({
                 style={styles.image}
                 contentFit="cover"
                 cachePolicy="memory-disk"
+                transition={200}
                 onError={() => {
                   if (!hasLoadError) setHasLoadError(true);
                 }}

@@ -76,6 +76,9 @@ export const BottomNav: React.FC<BottomNavProps> = React.memo(({
               activeOpacity={0.7}
               onPress={() => handlePress(tab.key)}
               style={styles.tabButton}
+              accessibilityRole="tab"
+              accessibilityLabel={tab.label}
+              accessibilityState={{ selected: isActive }}
             >
               <View style={styles.iconContainer}>
                 {tab.icon}
@@ -134,14 +137,6 @@ const styles = StyleSheet.create({
     fontSize: 10.5,
     marginTop: 2,
     letterSpacing: 0.1,
-  },
-  dotBadge: {
-    position: 'absolute',
-    top: 0,
-    right: -2,
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
   },
   counterBadge: {
     position: 'absolute',

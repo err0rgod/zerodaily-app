@@ -1,18 +1,28 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { RotateCcw } from 'lucide-react-native';
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Animated,
   Dimensions,
-  Easing,
+  InteractionManager,
   LayoutChangeEvent,
-  PanResponder,
   Platform,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  Extrapolation,
+  interpolate,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSpring,
+  withTiming,
+  type SharedValue,
+} from 'react-native-reanimated';
 import { CATEGORIES, getDynamicFallbackImage } from '../../constants/categories';
 import { useFeedStore } from '../../store/feedStore';
 import { useTheme } from '../../store/themeStore';
@@ -20,6 +30,76 @@ import { Article, CategoryKey } from '../../types';
 import { NewsCard } from './NewsCard';
 import { NewsCardBack } from './NewsCardBack';
 import { ScreenGlareLoader } from './ScreenGlareLoader';
+
+/* ------------------------------------------------------------------ *
+ * Gesture tuning
+ *
+ * Deck (vertical): a card change commits past 12% of the card height
+ * (capped at 80px) or on a decisive vertical fling.
+ *
+ * Flip (horizontal): the card must be dragged more than 30% of the
+ * screen width to commit — a 10% nudge always snaps back. A fast flick
+ * still needs 15% of travel first, so the motion is never fully
+ * automated by velocity alone.
+ * ------------------------------------------------------------------ */
+const AXIS_ACTIVATION_PX = 12;
+const AXIS_FAIL_PX = 18;
+
+const SWIPE_COMMIT_RATIO = 0.12;
+const SWIPE_MAX_THRESHOLD_PX = 80;
+const SWIPE_FLING_VELOCITY = 0.6;
+
+const FLIP_COMMIT_RATIO = 0.3;
+const FLIP_FLING_MIN_RATIO = 0.15;
+const FLIP_FLING_VELOCITY = 1.0;
+/** Drag distance that maps to a full 180° rotation. At the 30% commit
+ *  threshold the card is already ~50% flipped, so the settle reads as a
+ *  continuation of the gesture rather than a jump. */
+const FLIP_FULL_DRAG_RATIO = 0.6;
+const FLIP_SPRING = { damping: 20, stiffness: 200, mass: 0.9 } as const;
+
+const DECK_ANIM_MS = 220;
+const PULL_REFRESH_TRIGGER_PX = 55;
+
+// Module-scope so they can be invoked from the UI thread via runOnJS.
+const hapticLight = () => {
+  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+};
+const hapticMedium = () => {
+  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+};
+
+/**
+ * Animates the deck one card in `direction` and commits the index change when
+ * it lands. Module scope with an explicit 'worklet' directive so the gesture
+ * callbacks can call it without hopping back to the JS thread mid-gesture.
+ */
+function slideDeck(
+  panY: SharedValue<number>,
+  flip: SharedValue<number>,
+  isFlippedSV: SharedValue<number>,
+  animatingSV: SharedValue<number>,
+  indexSV: SharedValue<number>,
+  commit: (next: number) => void,
+  height: number,
+  direction: 1 | -1
+) {
+  'worklet';
+  animatingSV.value = 1;
+  flip.value = 0;
+  isFlippedSV.value = 0;
+  panY.value = withTiming(
+    direction > 0 ? -height : height,
+    { duration: DECK_ANIM_MS },
+    (finished) => {
+      if (finished) {
+        runOnJS(commit)(indexSV.value + direction);
+      } else {
+        animatingSV.value = 0;
+      }
+    }
+  );
+}
 
 interface CardSwiperProps {
   onOpenFullRoast: (article: Article) => void;
@@ -32,433 +112,322 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
   onOpenSourceLink,
   onOpenImageViewer,
 }) => {
-  const {
-    articles,
-    category,
-    currentIndex,
-    setCurrentIndex,
-    refreshFeed,
-    isRefreshing,
-    loadInitialFeed,
-    isLoading,
-  } = useFeedStore();
+  // Granular selectors: the deck must not re-render when the store writes
+  // cursor/hasMore/isPrefetching during a background prefetch.
+  const articles = useFeedStore((s) => s.articles);
+  const category = useFeedStore((s) => s.category);
+  const currentIndex = useFeedStore((s) => s.currentIndex);
+  const setCurrentIndex = useFeedStore((s) => s.setCurrentIndex);
+  const refreshFeed = useFeedStore((s) => s.refreshFeed);
+  const isRefreshing = useFeedStore((s) => s.isRefreshing);
+  const isLoading = useFeedStore((s) => s.isLoading);
 
   const { colors, isDark } = useTheme();
 
-  // Screen / Container dimensions
   const [windowDim, setWindowDim] = useState(() => Dimensions.get('window'));
   const [containerHeight, setContainerHeight] = useState<number>(0);
-
-  // Live mutable refs to permanently prevent stale closure traps in gesture handlers
-  const currentIndexRef = useRef<number>(currentIndex);
-  currentIndexRef.current = currentIndex;
-
-  const articlesRef = useRef<Article[]>(articles);
-  articlesRef.current = articles;
-
-  const containerHeightRef = useRef<number>(containerHeight);
-  containerHeightRef.current = containerHeight;
-
-  const isAnimatingRef = useRef<boolean>(false);
-  const gestureDirectionRef = useRef<'none' | 'vertical' | 'horizontal'>('none');
-  const panY = useRef(new Animated.Value(0)).current;
-  const flipAnim = useRef(new Animated.Value(0)).current;
   const [isFlipped, setIsFlipped] = useState<boolean>(false);
-  const isFlippedRef = useRef<boolean>(false);
-  isFlippedRef.current = isFlipped;
-  const refreshSpinAnim = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
-    if (isRefreshing) {
-      const loop = Animated.loop(
-        Animated.timing(refreshSpinAnim, {
-          toValue: 1,
-          duration: 900,
-          easing: Easing.linear,
-          useNativeDriver: Platform.OS !== 'web',
-        })
-      );
-      loop.start();
-      return () => loop.stop();
-    } else {
-      refreshSpinAnim.setValue(0);
-    }
-  }, [isRefreshing, refreshSpinAnim]);
+  /* ---------------- shared values (UI thread) ---------------- */
+  const panY = useSharedValue(0);
+  const flip = useSharedValue(0);
+  const spin = useSharedValue(0);
+  // Mirrors of React state that gesture worklets must read. Kept in sync
+  // synchronously on commit and via effects otherwise.
+  const indexSV = useSharedValue(currentIndex);
+  const countSV = useSharedValue(articles.length);
+  const heightSV = useSharedValue(0);
+  const widthSV = useSharedValue(windowDim.width);
+  const isFlippedSV = useSharedValue(0);
+  const animatingSV = useSharedValue(0);
+  /** 1 once onEnd has settled the flip, 0 while a drag is still live. Lets
+   *  onFinalize distinguish "gesture finished normally" from "gesture was
+   *  cancelled mid-drag" without double-starting a spring. */
+  const flipSettledSV = useSharedValue(1);
 
-  const refreshSpin = refreshSpinAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
+  /* ---------------- dimensions ---------------- */
 
-  // Window dimension listener for screen rotations / resizes
   useEffect(() => {
     const sub = Dimensions.addEventListener('change', ({ window }) => {
       setWindowDim(window);
+      // Keep the gesture worklets on the live width so rotation / fold /
+      // window resize never leaves stale math behind.
+      widthSV.value = window.width;
     });
     return () => sub?.remove();
-  }, []);
+  }, [widthSV]);
 
-  // Safe height getter that never returns 0
+  useEffect(() => {
+    widthSV.value = windowDim.width;
+  }, [windowDim.width, widthSV]);
+
+  useEffect(() => {
+    indexSV.value = currentIndex;
+  }, [currentIndex, indexSV]);
+
+  useEffect(() => {
+    countSV.value = articles.length;
+  }, [articles.length, countSV]);
+
   const getCardHeight = useCallback((): number => {
-    if (containerHeightRef.current > 60) {
-      return containerHeightRef.current;
-    }
-    // Fallback based on window height minus top bar and bottom nav estimates
+    if (containerHeight > 60) return containerHeight;
     return Math.max(windowDim.height - 110, 400);
-  }, [windowDim.height]);
+  }, [containerHeight, windowDim.height]);
 
-  // Initial feed load if store is empty and not already loading
-  useEffect(() => {
-    if (articles.length === 0 && !isLoading) {
-      loadInitialFeed();
-    }
-  }, [articles.length, isLoading, loadInitialFeed]);
+  const handleLayout = useCallback(
+    (e: LayoutChangeEvent) => {
+      const { height } = e.nativeEvent.layout;
+      if (height > 60) {
+        setContainerHeight(height);
+        heightSV.value = height;
+      }
+    },
+    [heightSV]
+  );
 
-  // Warm-up disk & memory image cache for category fallback pools
+  /* ---------------- feed loading ---------------- */
+
+  // Boot loading is owned by App.tsx, which has to coordinate with a tapped
+  // notification before deciding whether to load. Loading here too would issue
+  // a duplicate request on every cold start.
+
+  // Warm the active category's fallback pool only, deferred until after the
+  // first paint and the initial feed request so it never competes with the
+  // cold-boot critical path. Prefetching every category up front meant 32
+  // requests on launch for images most sessions never reach.
   useEffect(() => {
-    Object.values(CATEGORIES).forEach((cat) => {
-      const pool = cat.fallbackImages || [cat.fallbackImage];
+    const task = InteractionManager.runAfterInteractions(() => {
+      const active = CATEGORIES[category];
+      if (!active) return;
+      const pool = active.fallbackImages || [active.fallbackImage];
       pool.forEach((img) => {
-        if (img) {
-          Image.prefetch(img).catch(() => {});
-        }
+        if (img) Image.prefetch(img).catch(() => {});
       });
     });
-  }, []);
+    return () => task.cancel();
+  }, [category]);
 
-  // Image prefetching for upcoming cards
+  // Prefetch the next few hero images. Also warms the *previous* card so a
+  // swipe-back does not have to hit the network.
   useEffect(() => {
-    if (articles.length > 0) {
-      const nextBatch = articles.slice(currentIndex + 1, currentIndex + 4);
-      nextBatch.forEach((article) => {
-        const url =
-          article.image_url && article.image_url.trim().length > 0
-            ? article.image_url
-            : getDynamicFallbackImage(article.id, article.category);
-        if (url) {
-          Image.prefetch(url).catch(() => {});
-        }
-      });
+    if (articles.length === 0) return;
+    const from = Math.max(0, currentIndex - 1);
+    const to = Math.min(articles.length, currentIndex + 4);
+    for (let i = from; i < to; i++) {
+      const article = articles[i];
+      if (!article) continue;
+      const url =
+        article.image_url && article.image_url.trim().length > 0
+          ? article.image_url
+          : getDynamicFallbackImage(article.id, article.category);
+      if (url) Image.prefetch(url).catch(() => {});
     }
   }, [currentIndex, articles]);
 
-  // Reset animation position synchronously before paint whenever index or category changes
-  useLayoutEffect(() => {
-    panY.stopAnimation();
-    flipAnim.stopAnimation();
-    panY.setValue(0);
-    flipAnim.setValue(0);
-    setIsFlipped(false);
-    isFlippedRef.current = false;
-    isAnimatingRef.current = false;
-    gestureDirectionRef.current = 'none';
-  }, [category, currentIndex, panY, flipAnim]);
+  /* ---------------- refresh spinner ---------------- */
 
-  // Capture container height dynamically
-  const handleLayout = (e: LayoutChangeEvent) => {
-    const { height } = e.nativeEvent.layout;
-    if (height > 60 && height !== containerHeight) {
-      setContainerHeight(height);
-      containerHeightRef.current = height;
+  useEffect(() => {
+    if (isRefreshing) {
+      spin.value = 0;
+      spin.value = withRepeat(withTiming(1, { duration: 900 }), -1, false);
+    } else {
+      spin.value = withTiming(0, { duration: 120 });
     }
-  };
+  }, [isRefreshing, spin]);
 
-  // Programmatic 3D Card Flip toggle
-  const toggleFlip = useCallback(() => {
-    if (isAnimatingRef.current) return;
-    isAnimatingRef.current = true;
-    const target = isFlippedRef.current ? 0 : 1;
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    }
-    Animated.spring(flipAnim, {
-      toValue: target,
-      friction: 8,
-      tension: 45,
-      useNativeDriver: Platform.OS !== 'web',
-    }).start(() => {
-      const next = target === 1;
-      setIsFlipped(next);
-      isFlippedRef.current = next;
-      isAnimatingRef.current = false;
-    });
-  }, [flipAnim]);
+  /* ---------------- commit / reset ---------------- */
 
-  // Programmatic navigation to next card
-  const goToNextCard = useCallback(() => {
-    const curr = currentIndexRef.current;
-    const total = articlesRef.current.length;
-    const height = getCardHeight();
+  // Called from the UI thread once a deck animation settles. Writes the
+  // mirror shared values synchronously so the next gesture starts from a
+  // consistent state, then hands the index change to React.
+  const commitIndex = useCallback(
+    (next: number) => {
+      indexSV.value = next;
+      panY.value = 0;
+      flip.value = 0;
+      isFlippedSV.value = 0;
+      animatingSV.value = 0;
+      setIsFlipped(false);
+      setCurrentIndex(next);
+    },
+    [animatingSV, flip, indexSV, isFlippedSV, panY, setCurrentIndex]
+  );
 
-    if (isAnimatingRef.current || curr >= total - 1) return;
-    isAnimatingRef.current = true;
-    flipAnim.setValue(0);
-    setIsFlipped(false);
-    isFlippedRef.current = false;
-
-    Animated.timing(panY, {
-      toValue: -height,
-      duration: 230,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: Platform.OS !== 'web',
-    }).start(() => {
-      setCurrentIndex(curr + 1);
-    });
-  }, [getCardHeight, panY, setCurrentIndex, flipAnim]);
-
-  // Programmatic navigation to previous card
-  const goToPrevCard = useCallback(() => {
-    const curr = currentIndexRef.current;
-    const height = getCardHeight();
-
-    if (isAnimatingRef.current) return;
-
-    if (curr === 0) {
-      refreshFeed();
+  // Backstop: guarantees the deck is at rest for the newly painted card
+  // even if a commit path above was interrupted.
+  const isFirstRunRef = useRef(true);
+  useEffect(() => {
+    if (isFirstRunRef.current) {
+      isFirstRunRef.current = false;
       return;
     }
+    panY.value = 0;
+    flip.value = 0;
+    isFlippedSV.value = 0;
+    animatingSV.value = 0;
+  }, [category, currentIndex, panY, flip, isFlippedSV, animatingSV]);
 
-    isAnimatingRef.current = true;
-    flipAnim.setValue(0);
-    setIsFlipped(false);
-    isFlippedRef.current = false;
+  /* ---------------- flip ---------------- */
 
-    Animated.timing(panY, {
-      toValue: height,
-      duration: 230,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: Platform.OS !== 'web',
-    }).start(() => {
-      setCurrentIndex(curr - 1);
+  const setFlippedState = useCallback((next: boolean) => {
+    setIsFlipped(next);
+  }, []);
+
+  const toggleFlip = useCallback(() => {
+    if (animatingSV.value === 1) return;
+    const from = isFlippedSV.value === 1 ? 1 : 0;
+    const target = from === 1 ? 0 : 1;
+    animatingSV.value = 1;
+    runOnJS(hapticLight)();
+    isFlippedSV.value = target;
+    flip.value = withSpring(target, FLIP_SPRING, (finished) => {
+      if (finished) {
+        animatingSV.value = 0;
+        runOnJS(setFlippedState)(target === 1);
+      }
     });
-  }, [getCardHeight, panY, setCurrentIndex, refreshFeed, flipAnim]);
+  }, [animatingSV, flip, isFlippedSV, setFlippedState]);
 
-  // Web desktop mouse wheel and arrow key shortcuts
-  useEffect(() => {
-    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  /* ---------------- gestures ---------------- */
 
-    let lastWheelTime = 0;
-    const handleWheel = (e: WheelEvent) => {
-      const now = Date.now();
-      if (now - lastWheelTime < 400) return;
+  const reloadFromTop = useCallback(() => {
+    runOnJS(refreshFeed)();
+  }, [refreshFeed]);
 
-      if (e.deltaY > 20) {
-        goToNextCard();
-        lastWheelTime = now;
-      } else if (e.deltaY < -20) {
-        goToPrevCard();
-        lastWheelTime = now;
-      }
-    };
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
-        e.preventDefault();
-        goToNextCard();
-      } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
-        e.preventDefault();
-        goToPrevCard();
-      }
-    };
-
-    window.addEventListener('wheel', handleWheel, { passive: true });
-    window.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      window.removeEventListener('wheel', handleWheel);
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [goToNextCard, goToPrevCard]);
-
-  // Robust PanResponder supporting vertical deck switching & interactive 3D horizontal card flipping (>30% threshold)
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onStartShouldSetPanResponderCapture: () => false,
-
-      onMoveShouldSetPanResponder: (_, gesture) => {
-        if (isAnimatingRef.current) return false;
-        // Vertical card swipe when displacement > 12px
-        const isVertical = Math.abs(gesture.dy) > 12 && Math.abs(gesture.dy) > Math.abs(gesture.dx) * 0.75;
-        // Horizontal left or right swipe to flip card when displacement > 12px
-        const isHorizontal = Math.abs(gesture.dx) > 12 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 0.75;
-        return isVertical || isHorizontal;
-      },
-      onMoveShouldSetPanResponderCapture: () => false,
-
-      onPanResponderGrant: () => {
-        panY.stopAnimation();
-        flipAnim.stopAnimation();
-        isAnimatingRef.current = false;
-        gestureDirectionRef.current = 'none';
-      },
-
-      onPanResponderMove: (_, gesture) => {
-        if (isAnimatingRef.current) return;
-
-        if (gestureDirectionRef.current === 'none') {
-          if (Math.abs(gesture.dy) > Math.abs(gesture.dx)) {
-            gestureDirectionRef.current = 'vertical';
-          } else if (Math.abs(gesture.dx) > 0) {
-            gestureDirectionRef.current = 'horizontal';
-          }
-        }
-
-        if (gestureDirectionRef.current === 'vertical') {
-          panY.setValue(gesture.dy);
-        } else if (gestureDirectionRef.current === 'horizontal') {
-          // Interactive 3D flip tracking as user drags finger left or right
-          const screenWidth = windowDim.width;
-          const dragDist = Math.abs(gesture.dx);
-          const dragProgress = Math.min(dragDist / (screenWidth * 0.7), 1);
-
-          if (isFlippedRef.current) {
-            // Currently at Back face: dragging moves back towards Front (0)
-            flipAnim.setValue(Math.max(1 - dragProgress, 0));
-          } else {
-            // Currently at Front face: dragging moves towards Back (1)
-            flipAnim.setValue(dragProgress);
-          }
-        }
-      },
-
-      onPanResponderRelease: (_, gesture) => {
-        if (isAnimatingRef.current) return;
-
-        if (gestureDirectionRef.current === 'horizontal') {
-          const screenWidth = windowDim.width;
-          const dragFraction = Math.abs(gesture.dx) / screenWidth;
-          // Requirement: "sliding should not be fully automated so that the user only flips 10% and the card flips it should be more than 30%"
-          const thresholdPassed = dragFraction >= 0.30 || Math.abs(gesture.vx) > 0.65;
-
-          isAnimatingRef.current = true;
-          if (isFlippedRef.current) {
-            // Was at back: flip to front if threshold passed (>30%), else stay at back (1)
-            const target = thresholdPassed ? 0 : 1;
-            if (thresholdPassed && Platform.OS !== 'web') {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-            }
-            Animated.spring(flipAnim, {
-              toValue: target,
-              friction: 8,
-              tension: 45,
-              useNativeDriver: Platform.OS !== 'web',
-            }).start(() => {
-              const nextFlipped = target === 1;
-              setIsFlipped(nextFlipped);
-              isFlippedRef.current = nextFlipped;
-              isAnimatingRef.current = false;
-              gestureDirectionRef.current = 'none';
-            });
-          } else {
-            // Was at front: flip to back if threshold passed (>30%), else snap back to front (0)
-            const target = thresholdPassed ? 1 : 0;
-            if (thresholdPassed && Platform.OS !== 'web') {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-            }
-            Animated.spring(flipAnim, {
-              toValue: target,
-              friction: 8,
-              tension: 45,
-              useNativeDriver: Platform.OS !== 'web',
-            }).start(() => {
-              const nextFlipped = target === 1;
-              setIsFlipped(nextFlipped);
-              isFlippedRef.current = nextFlipped;
-              isAnimatingRef.current = false;
-              gestureDirectionRef.current = 'none';
-            });
-          }
-          return;
-        }
-
-        const height = getCardHeight();
-        const threshold = Math.min(height * 0.12, 80); // Distance threshold (80px max)
-        const isUpSwipe = gesture.dy < -threshold || gesture.vy < -0.25;
-        const isDownSwipe = gesture.dy > threshold || gesture.vy > 0.25;
-
-        const curr = currentIndexRef.current;
-        const total = articlesRef.current.length;
-
-        if (isUpSwipe && curr < total - 1) {
-          // Swipe up: Active card slides away, next card underneath scales up
-          isAnimatingRef.current = true;
-          flipAnim.setValue(0);
-          setIsFlipped(false);
-          isFlippedRef.current = false;
-          Animated.timing(panY, {
-            toValue: -height,
-            duration: 220,
-            easing: Easing.out(Easing.quad),
-            useNativeDriver: Platform.OS !== 'web',
-          }).start(() => {
-            setCurrentIndex(curr + 1);
-          });
-        } else if (isDownSwipe && curr > 0) {
-          // Swipe down: Active card slides down, previous card underneath scales up
-          isAnimatingRef.current = true;
-          flipAnim.setValue(0);
-          setIsFlipped(false);
-          isFlippedRef.current = false;
-          Animated.timing(panY, {
-            toValue: height,
-            duration: 220,
-            easing: Easing.out(Easing.quad),
-            useNativeDriver: Platform.OS !== 'web',
-          }).start(() => {
-            setCurrentIndex(curr - 1);
-          });
-        } else if (isDownSwipe && curr === 0) {
-          // Pull-down at top card: Refresh trigger
-          if (gesture.dy > 55) {
-            refreshFeed();
-          }
-          Animated.spring(panY, {
-            toValue: 0,
-            friction: 7,
-            tension: 50,
-            useNativeDriver: Platform.OS !== 'web',
-          }).start(() => {
-            isAnimatingRef.current = false;
-          });
-        } else {
-          // Swipe didn't exceed threshold: Snap back to rest
-          Animated.spring(panY, {
-            toValue: 0,
-            friction: 7,
-            tension: 50,
-            useNativeDriver: Platform.OS !== 'web',
-          }).start(() => {
-            isAnimatingRef.current = false;
-          });
-        }
-      },
-
-      onPanResponderTerminationRequest: () => false,
-      onPanResponderTerminate: () => {
-        isAnimatingRef.current = false;
-        gestureDirectionRef.current = 'none';
-        Animated.spring(panY, {
-          toValue: 0,
-          friction: 7,
-          tension: 50,
-          useNativeDriver: Platform.OS !== 'web',
-        }).start();
-        Animated.spring(flipAnim, {
-          toValue: isFlippedRef.current ? 1 : 0,
-          friction: 8,
-          tension: 45,
-          useNativeDriver: Platform.OS !== 'web',
-        }).start();
-      },
+  // Horizontal: 3D flip. Only claims clearly-horizontal drags so the
+  // back-face ScrollView keeps owning vertical scrolling.
+  const flipGesture = Gesture.Pan()
+    .activeOffsetX([-AXIS_ACTIVATION_PX, AXIS_ACTIVATION_PX])
+    .failOffsetY([-AXIS_FAIL_PX, AXIS_FAIL_PX])
+    .onBegin(() => {
+      'worklet';
+      flipSettledSV.value = 0;
     })
-  ).current;
+    .onUpdate((e) => {
+      'worklet';
+      if (animatingSV.value === 1) return;
+      const w = widthSV.value || 1;
+      const progress = Math.min(Math.abs(e.translationX) / (w * FLIP_FULL_DRAG_RATIO), 1);
+      const base = isFlippedSV.value === 1 ? 1 : 0;
+      flip.value = base === 1 ? Math.max(1 - progress, 0) : progress;
+    })
+    .onEnd((e) => {
+      'worklet';
+      flipSettledSV.value = 1;
 
-  // Show ScreenGlareLoader on initial load AND on pull-to-refresh
-  if (articles.length === 0 || isRefreshing) {
-    if (isLoading || isRefreshing) {
-      const renderHeight = containerHeight > 60 ? containerHeight : getCardHeight();
-      return <ScreenGlareLoader cardHeight={renderHeight} />;
+      if (animatingSV.value === 1) {
+        flip.value = withSpring(isFlippedSV.value, FLIP_SPRING);
+        return;
+      }
+
+      const w = widthSV.value || 1;
+      const travelled = Math.abs(e.translationX) / w;
+      const committed =
+        travelled >= FLIP_COMMIT_RATIO ||
+        (travelled >= FLIP_FLING_MIN_RATIO && Math.abs(e.velocityX) >= FLIP_FLING_VELOCITY);
+
+      const from = isFlippedSV.value === 1 ? 1 : 0;
+      const target = committed ? (from === 1 ? 0 : 1) : from;
+
+      if (target !== from) runOnJS(hapticMedium)();
+      isFlippedSV.value = target;
+      animatingSV.value = 1;
+      flip.value = withSpring(target, FLIP_SPRING, (finished) => {
+        if (finished) {
+          animatingSV.value = 0;
+          if (target !== from) runOnJS(setFlippedState)(target === 1);
+        }
+      });
+    })
+    .onFinalize(() => {
+      'worklet';
+      // Cancelled mid-drag (lost the race, or the touch was stolen): settle on
+      // whichever face the flip state already points at.
+      if (flipSettledSV.value === 0) {
+        flip.value = withSpring(isFlippedSV.value, FLIP_SPRING);
+      }
+    });
+
+  // Vertical: deck navigation. Disabled while flipped so the summary
+  // ScrollView owns vertical panning without a responder tug-of-war.
+  const deckGesture = Gesture.Pan()
+    .enabled(!isFlipped)
+    .activeOffsetY([-AXIS_ACTIVATION_PX, AXIS_ACTIVATION_PX])
+    .failOffsetX([-AXIS_FAIL_PX, AXIS_FAIL_PX])
+    .onUpdate((e) => {
+      'worklet';
+      if (animatingSV.value === 1) return;
+      const dy = e.translationY;
+      const canUp = indexSV.value < countSV.value - 1;
+      const canDown = indexSV.value > 0;
+
+      if (dy < 0 && !canUp) {
+        // Last card: damped overscroll instead of a dead stop.
+        panY.value = dy * 0.28;
+      } else if (dy > 0 && !canDown) {
+        // First card: rubber-band into the refresh affordance.
+        panY.value = Math.min(dy * 0.55, 110);
+      } else {
+        panY.value = dy;
+      }
+    })
+    .onEnd((e) => {
+      'worklet';
+      if (animatingSV.value === 1) return;
+      const h = heightSV.value || 1;
+      const dy = e.translationY;
+      const canUp = indexSV.value < countSV.value - 1;
+      const canDown = indexSV.value > 0;
+
+      const threshold = Math.min(h * SWIPE_COMMIT_RATIO, SWIPE_MAX_THRESHOLD_PX);
+      const wantsUp = dy < -threshold || e.velocityY < -SWIPE_FLING_VELOCITY;
+      const wantsDown = dy > threshold || e.velocityY > SWIPE_FLING_VELOCITY;
+
+      if (wantsUp && canUp) {
+        slideDeck(panY, flip, isFlippedSV, animatingSV, indexSV, commitIndex, h, 1);
+      } else if (wantsDown && canDown) {
+        slideDeck(panY, flip, isFlippedSV, animatingSV, indexSV, commitIndex, h, -1);
+      } else if (wantsDown && !canDown) {
+        if (dy > PULL_REFRESH_TRIGGER_PX) runOnJS(reloadFromTop)();
+        panY.value = withSpring(0, { damping: 18, stiffness: 180 });
+      } else {
+        panY.value = withSpring(0, { damping: 18, stiffness: 180 });
+      }
+    })
+    .onFinalize(() => {
+      'worklet';
+      if (animatingSV.value === 0 && panY.value !== 0) {
+        panY.value = withSpring(0, { damping: 18, stiffness: 180 });
+      }
+    });
+
+  // The two axes race: whichever activates first wins and the other fails,
+  // so a diagonal drag can never be half-flip / half-swipe.
+  const gesture = Gesture.Race(flipGesture, deckGesture);
+
+  /* ---------------- derived styles ---------------- */
+
+  const pullBadgeStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(panY.value, [0, 60], [0, 1], Extrapolation.CLAMP),
+    transform: [
+      { translateY: interpolate(panY.value, [0, 100], [-35, 12], Extrapolation.CLAMP) },
+    ],
+  }));
+
+  const spinnerStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${spin.value * 360}deg` }],
+  }));
+
+  /* ---------------- render ---------------- */
+
+  const height = getCardHeight();
+  const cardRenderHeight = containerHeight > 60 ? containerHeight : height;
+
+  // Only blank the deck when there is genuinely nothing to show. A
+  // pull-to-refresh keeps the current card mounted underneath the spinner.
+  if (articles.length === 0) {
+    if (isLoading) {
+      return <ScreenGlareLoader cardHeight={cardRenderHeight} />;
     }
     return (
       <View style={[styles.emptyContainer, { backgroundColor: colors.background }]}>
@@ -470,272 +439,250 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     );
   }
 
-  const height = getCardHeight();
-  const cardRenderHeight = containerHeight > 60 ? containerHeight : height;
-
   const currentArticle = articles[currentIndex] || articles[0];
   const nextArticle = currentIndex < articles.length - 1 ? articles[currentIndex + 1] : null;
   const prevArticle = currentIndex > 0 ? articles[currentIndex - 1] : null;
+  const isFirstCard = currentIndex === 0;
 
-  const activeSlot = currentIndex % 3;
-  const nextSlot = (currentIndex + 1) % 3;
-  const prevSlot = (currentIndex - 1 + 3) % 3;
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]} onLayout={handleLayout}>
+      <GestureDetector gesture={gesture}>
+        <View style={styles.deckWrapper}>
+          {/* Pull-to-refresh affordance */}
+          {isFirstCard && (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.pullRefreshBadge,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                },
+                pullBadgeStyle,
+              ]}
+            >
+              <Animated.View style={spinnerStyle}>
+                <RotateCcw size={14} color={colors.primary} />
+              </Animated.View>
+              <Text style={[styles.pullRefreshText, { color: colors.textPrimary }]}>
+                {isRefreshing ? 'Refreshing stories...' : 'Pull down to refresh'}
+              </Text>
+            </Animated.View>
+          )}
 
-  const getSlotArticle = (slotIndex: number): Article | null => {
-    if (slotIndex === activeSlot) return currentArticle;
-    if (slotIndex === nextSlot) return nextArticle;
-    if (slotIndex === prevSlot) return prevArticle;
-    return null;
-  };
+          {/* Previous card — revealed by pulling down */}
+          {prevArticle && (
+            <DeckLayer
+              key="deck-prev"
+              variant="prev"
+              panY={panY}
+              heightSV={heightSV}
+              isFirstCard={isFirstCard}
+              cardHeight={cardRenderHeight}
+            >
+              <NewsCard
+                article={prevArticle}
+                cardHeight={cardRenderHeight}
+                variant="compact"
+                onOpenFullRoast={onOpenFullRoast}
+                onOpenSourceLink={onOpenSourceLink}
+                onOpenImageViewer={onOpenImageViewer}
+              />
+            </DeckLayer>
+          )}
 
-  const orderedSlots = [prevSlot, nextSlot, activeSlot];
+          {/* Next card — visible underneath so the deck reads as a stack */}
+          {nextArticle && (
+            <DeckLayer
+              key="deck-next"
+              variant="next"
+              panY={panY}
+              heightSV={heightSV}
+              isFirstCard={isFirstCard}
+              cardHeight={cardRenderHeight}
+            >
+              <NewsCard
+                article={nextArticle}
+                cardHeight={cardRenderHeight}
+                variant="compact"
+                onOpenFullRoast={onOpenFullRoast}
+                onOpenSourceLink={onOpenSourceLink}
+                onOpenImageViewer={onOpenImageViewer}
+              />
+            </DeckLayer>
+          )}
 
-  // Deck Layer Transformations:
-  // 1. Next Card Underneath: scales from 0.96 up to 1.0, translates Y from 8px to 0px
-  const nextCardScale = panY.interpolate({
-    inputRange: [-height, 0],
-    outputRange: [1.0, 0.96],
-    extrapolate: 'clamp',
-  });
+          {/* Active card — front and back faces of the same story */}
+          <DeckLayer
+            key="deck-current"
+            variant="current"
+            panY={panY}
+            heightSV={heightSV}
+            isFirstCard={isFirstCard}
+            cardHeight={cardRenderHeight}
+            zIndex={10}
+          >
+            <FlipFaces
+              flip={flip}
+              article={currentArticle}
+              cardHeight={cardRenderHeight}
+              isFlipped={isFlipped}
+              isDark={isDark}
+              onOpenFullRoast={onOpenFullRoast}
+              onOpenSourceLink={onOpenSourceLink}
+              onOpenImageViewer={onOpenImageViewer}
+              onFlip={toggleFlip}
+            />
+          </DeckLayer>
+        </View>
+      </GestureDetector>
+    </View>
+  );
+};
 
-  const nextCardTranslateY = panY.interpolate({
-    inputRange: [-height, 0],
-    outputRange: [0, 8],
-    extrapolate: 'clamp',
-  });
+/* ------------------------------------------------------------------ *
+ * Deck layer: positions one card in the stack from the shared panY.
+ * `variant` fixes the role, which is what makes the stack (rather than a
+ * rotating 3-slot window) stable — a layer never changes its render
+ * branch, so React keeps the subtree mounted across a swipe.
+ * ------------------------------------------------------------------ */
 
-  // Next card is VISIBLE underneath so that flipping reveals the card below!
-  const nextCardOpacity = panY.interpolate({
-    inputRange: [-height, 0],
-    outputRange: [1.0, 0.98],
-    extrapolate: 'clamp',
-  });
+interface DeckLayerProps {
+  variant: 'prev' | 'next' | 'current';
+  panY: SharedValue<number>;
+  heightSV: SharedValue<number>;
+  isFirstCard: boolean;
+  cardHeight: number;
+  zIndex?: number;
+  children: React.ReactNode;
+}
 
-  const nextCardDimmer = panY.interpolate({
-    inputRange: [-height, 0],
-    outputRange: [0, 0.15],
-    extrapolate: 'clamp',
-  });
+const DeckLayer: React.FC<DeckLayerProps> = ({
+  variant,
+  panY,
+  heightSV,
+  isFirstCard,
+  cardHeight,
+  zIndex,
+  children,
+}) => {
+  const layerStyle = useAnimatedStyle(() => {
+    const h = heightSV.value || 1;
 
-  // 2. Previous Card Underneath (when swiping down to go back): scales from 0.96 up to 1.0
-  const prevCardScale = panY.interpolate({
-    inputRange: [0, height],
-    outputRange: [0.96, 1.0],
-    extrapolate: 'clamp',
-  });
+    if (variant === 'current') {
+      const dropLimit = isFirstCard ? 90 : h;
+      return {
+        transform: [
+          { translateY: interpolate(panY.value, [-h, 0, h], [-h, 0, dropLimit], Extrapolation.CLAMP) },
+        ],
+      };
+    }
 
-  const prevCardTranslateY = panY.interpolate({
-    inputRange: [0, height],
-    outputRange: [8, 0],
-    extrapolate: 'clamp',
-  });
+    if (variant === 'next') {
+      return {
+        transform: [
+          { translateY: interpolate(panY.value, [-h, 0], [0, 8], Extrapolation.CLAMP) },
+          { scale: interpolate(panY.value, [-h, 0], [1, 0.96], Extrapolation.CLAMP) },
+        ],
+        opacity: interpolate(panY.value, [-h, 0, h], [1, 0.98, 0], Extrapolation.CLAMP),
+      };
+    }
 
-  const prevCardOpacity = panY.interpolate({
-    inputRange: [-0.001, 0, height],
-    outputRange: [0, 0.98, 1.0],
-    extrapolate: 'clamp',
-  });
-
-  const prevCardDimmer = panY.interpolate({
-    inputRange: [0, height],
-    outputRange: [0.15, 0],
-    extrapolate: 'clamp',
-  });
-
-  // 3. Active Card (ALWAYS ON TOP at zIndex: 10):
-  // When swiping up: slides up to -height
-  // When swiping down at card 0: rubber bands up to 90px
-  // When swiping down at card > 0: slides down to +height
-  const activeCardTranslateY = panY.interpolate({
-    inputRange: [-height, 0, height],
-    outputRange: [
-      -height,
-      0,
-      currentIndex === 0 ? 90 : height,
-    ],
-    extrapolate: 'clamp',
-  });
-
-  // 4. 3D Flip Card Rotations (Perspective 1200 with backfaceVisibility)
-  const frontRotateY = flipAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '180deg'],
-  });
-
-  const backRotateY = flipAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['180deg', '360deg'],
-  });
-
-  const frontOpacity = flipAnim.interpolate({
-    inputRange: [0, 0.49, 0.5, 1],
-    outputRange: [1, 1, 0, 0],
-  });
-
-  const backOpacity = flipAnim.interpolate({
-    inputRange: [0, 0.5, 0.51, 1],
-    outputRange: [0, 0, 1, 1],
-  });
-
-  // Pull-to-refresh badge interpolation
-  const pullProgress = panY.interpolate({
-    inputRange: [0, 60],
-    outputRange: [0, 1],
-    extrapolate: 'clamp',
+    // prev
+    return {
+      transform: [
+        { translateY: interpolate(panY.value, [0, h], [8, 0], Extrapolation.CLAMP) },
+        { scale: interpolate(panY.value, [0, h], [0.96, 1], Extrapolation.CLAMP) },
+      ],
+      opacity: interpolate(panY.value, [-1, 0, h], [0, 0.98, 1], Extrapolation.CLAMP),
+    };
   });
 
   return (
-    <View
-      style={[styles.container, { backgroundColor: colors.background }]}
-      onLayout={handleLayout}
-      {...panResponder.panHandlers}
+    <Animated.View
+      style={[
+        styles.cardLayer,
+        { height: cardHeight, zIndex: zIndex ?? (variant === 'prev' ? 5 : 4) },
+        layerStyle,
+      ]}
+      pointerEvents={variant === 'current' ? 'auto' : 'none'}
     >
-      <View style={styles.deckWrapper}>
-        {/* Pull to refresh visual badge (when pulling down at card 0) */}
-        {currentIndex === 0 && (
-          <Animated.View
-            style={[
-              styles.pullRefreshBadge,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                opacity: pullProgress,
-                transform: [
-                  {
-                    translateY: panY.interpolate({
-                      inputRange: [0, 100],
-                      outputRange: [-35, 12],
-                      extrapolate: 'clamp',
-                    }),
-                  },
-                ],
-              },
-            ]}
-          >
-            <Animated.View style={{ transform: [{ rotate: isRefreshing ? refreshSpin : '0deg' }] }}>
-              <RotateCcw size={14} color={colors.primary} />
-            </Animated.View>
-            <Text style={[styles.pullRefreshText, { color: colors.textPrimary }]}>
-              {isRefreshing ? 'Refreshing stories...' : 'Pull down to refresh'}
-            </Text>
-          </Animated.View>
-        )}
+      {children}
+    </Animated.View>
+  );
+};
 
-        {/* PERSISTENT 3-SLOT DECK: Pre-mounts incoming cards so images never blink across slides */}
-        {orderedSlots.map((slotIndex) => {
-          const article = getSlotArticle(slotIndex);
-          if (!article) return null;
+/* ------------------------------------------------------------------ *
+ * Flip faces
+ * ------------------------------------------------------------------ */
 
-          const isCurrent = slotIndex === activeSlot;
-          const isNext = slotIndex === nextSlot;
-          const isPrev = slotIndex === prevSlot;
+interface FlipFacesProps {
+  flip: SharedValue<number>;
+  article: Article;
+  cardHeight: number;
+  isFlipped: boolean;
+  isDark: boolean;
+  onOpenFullRoast: (article: Article) => void;
+  onOpenSourceLink: (url: string) => void;
+  onOpenImageViewer?: (imageUri: string, heading: string, category: CategoryKey) => void;
+  onFlip: () => void;
+}
 
-          const layerTransform = isCurrent
-            ? [{ translateY: activeCardTranslateY }]
-            : isNext
-            ? [{ translateY: nextCardTranslateY }, { scale: nextCardScale }]
-            : [{ translateY: prevCardTranslateY }, { scale: prevCardScale }];
+const FlipFaces: React.FC<FlipFacesProps> = ({
+  flip,
+  article,
+  cardHeight,
+  isFlipped,
+  isDark,
+  onOpenFullRoast,
+  onOpenSourceLink,
+  onOpenImageViewer,
+  onFlip,
+}) => {
+  const frontStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(flip.value, [0, 0.49, 0.5, 1], [1, 1, 0, 0]),
+    transform: [
+      { perspective: 1200 },
+      { rotateY: `${interpolate(flip.value, [0, 1], [0, 180])}deg` },
+    ],
+  }));
 
-          const layerOpacity = isCurrent
-            ? 1
-            : isNext
-            ? nextCardOpacity
-            : prevCardOpacity;
+  const backStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(flip.value, [0, 0.5, 0.51, 1], [0, 0, 1, 1]),
+    transform: [
+      { perspective: 1200 },
+      { rotateY: `${interpolate(flip.value, [0, 1], [180, 360])}deg` },
+    ],
+  }));
 
-          const layerZIndex = isCurrent ? 10 : isNext ? 4 : 3;
-          const dimmer = isNext ? nextCardDimmer : isPrev ? prevCardDimmer : null;
+  return (
+    <View style={styles.faceStack}>
+      <Animated.View
+        style={[styles.face, frontStyle]}
+        pointerEvents={isFlipped ? 'none' : 'auto'}
+      >
+        <NewsCard
+          article={article}
+          cardHeight={cardHeight}
+          onOpenFullRoast={onOpenFullRoast}
+          onOpenSourceLink={onOpenSourceLink}
+          onOpenImageViewer={onOpenImageViewer}
+          onFlip={onFlip}
+        />
+      </Animated.View>
 
-          return (
-            <Animated.View
-              key={`deck-slot-${slotIndex}`}
-              style={[
-                styles.cardLayer,
-                {
-                  height: cardRenderHeight,
-                  zIndex: layerZIndex,
-                  opacity: layerOpacity,
-                  transform: layerTransform,
-                },
-              ]}
-              pointerEvents={isCurrent ? 'auto' : 'none'}
-            >
-              {isCurrent ? (
-                <View style={StyleSheet.absoluteFill}>
-                  {/* FRONT FACE (Main Card with Image) */}
-                  <Animated.View
-                    style={[
-                      StyleSheet.absoluteFill,
-                      {
-                        opacity: frontOpacity,
-                        transform: [
-                          { perspective: 1200 },
-                          { rotateY: frontRotateY },
-                        ],
-                        backfaceVisibility: 'hidden',
-                      },
-                    ]}
-                    pointerEvents={isFlipped ? 'none' : 'auto'}
-                  >
-                    <NewsCard
-                      key={`front-${article.id}`}
-                      article={article}
-                      cardHeight={cardRenderHeight}
-                      onOpenFullRoast={onOpenFullRoast}
-                      onOpenSourceLink={onOpenSourceLink}
-                      onOpenImageViewer={onOpenImageViewer}
-                      onFlip={toggleFlip}
-                    />
-                  </Animated.View>
-
-                  {/* BACK FACE (Summary & Heading, NO IMAGE) */}
-                  <Animated.View
-                    style={[
-                      StyleSheet.absoluteFill,
-                      {
-                        opacity: backOpacity,
-                        transform: [
-                          { perspective: 1200 },
-                          { rotateY: backRotateY },
-                        ],
-                        backfaceVisibility: 'hidden',
-                      },
-                    ]}
-                    pointerEvents={isFlipped ? 'auto' : 'none'}
-                  >
-                    <NewsCardBack
-                      key={`back-${article.id}`}
-                      article={article}
-                      cardHeight={cardRenderHeight}
-                      onOpenSourceLink={onOpenSourceLink}
-                      onFlip={toggleFlip}
-                    />
-                  </Animated.View>
-                </View>
-              ) : (
-                <NewsCard
-                  key={article.id}
-                  article={article}
-                  cardHeight={cardRenderHeight}
-                  onOpenFullRoast={onOpenFullRoast}
-                  onOpenSourceLink={onOpenSourceLink}
-                  onOpenImageViewer={onOpenImageViewer}
-                />
-              )}
-              {dimmer && (
-                <Animated.View
-                  style={[
-                    styles.depthVeil,
-                    {
-                      opacity: dimmer,
-                      backgroundColor: isDark ? '#000000' : '#475569',
-                    },
-                  ]}
-                />
-              )}
-            </Animated.View>
-          );
-        })}
-      </View>
+      <Animated.View
+        style={[styles.face, backStyle]}
+        pointerEvents={isFlipped ? 'auto' : 'none'}
+      >
+        <NewsCardBack
+          article={article}
+          cardHeight={cardHeight}
+          isDark={isDark}
+          onOpenSourceLink={onOpenSourceLink}
+          onFlip={onFlip}
+        />
+      </Animated.View>
     </View>
   );
 };
@@ -759,13 +706,12 @@ const styles = StyleSheet.create({
     top: 0,
     width: '100%',
   },
-  depthVeil: {
-    position: 'absolute',
-    top: 4,
-    left: 10,
-    right: 10,
-    bottom: 6,
-    borderRadius: 18,
+  faceStack: {
+    flex: 1,
+  },
+  face: {
+    ...StyleSheet.absoluteFillObject,
+    backfaceVisibility: 'hidden',
   },
   pullRefreshBadge: {
     position: 'absolute',

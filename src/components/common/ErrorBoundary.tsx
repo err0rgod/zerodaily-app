@@ -1,6 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { THEME } from '../../constants/theme';
+import { useTheme } from '../../store/themeStore';
 
 interface Props {
   children: ReactNode;
@@ -10,6 +10,44 @@ interface State {
   hasError: boolean;
   error: Error | null;
 }
+
+/** Functional so the recovery screen can follow the active theme. */
+const ErrorFallback: React.FC<{ error: Error | null; onReset: () => void }> = ({
+  error,
+  onReset,
+}) => {
+  const { colors } = useTheme();
+
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <Text style={[styles.title, { color: colors.textPrimary }]}>System Recovery</Text>
+      <Text style={[styles.description, { color: colors.textSecondary }]}>
+        ZeroDaily encountered an unexpected layout anomaly.
+      </Text>
+
+      {/* Raw stack details are a development aid, not user-facing copy. */}
+      {__DEV__ && error && (
+        <Text
+          style={[
+            styles.errorMessage,
+            { color: colors.danger, backgroundColor: `${colors.danger}15` },
+          ]}
+        >
+          {error.message}
+        </Text>
+      )}
+
+      <TouchableOpacity
+        style={[styles.retryButton, { backgroundColor: colors.primary }]}
+        onPress={onReset}
+        activeOpacity={0.8}
+        accessibilityRole="button"
+      >
+        <Text style={styles.retryText}>Relaunch Stream</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
 
 export class ErrorBoundary extends Component<Props, State> {
   public state: State = {
@@ -31,24 +69,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public render() {
     if (this.state.hasError) {
-      return (
-        <View style={styles.container}>
-          <Text style={styles.title}>System Recovery</Text>
-          <Text style={styles.description}>
-            ZeroDaily encountered an unexpected layout anomaly.
-          </Text>
-          {this.state.error && (
-            <Text style={styles.errorMessage}>{this.state.error.message}</Text>
-          )}
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={this.handleReset}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.retryText}>Relaunch Stream</Text>
-          </TouchableOpacity>
-        </View>
-      );
+      return <ErrorFallback error={this.state.error} onReset={this.handleReset} />;
     }
 
     return this.props.children;
@@ -58,7 +79,6 @@ export class ErrorBoundary extends Component<Props, State> {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
@@ -66,31 +86,25 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '800',
-    color: THEME.colors.textPrimary,
     marginBottom: 8,
   },
   description: {
     fontSize: 14,
-    color: THEME.colors.textSecondary,
     textAlign: 'center',
     marginBottom: 16,
     lineHeight: 20,
   },
   errorMessage: {
     fontSize: 12,
-    color: THEME.colors.danger,
-    backgroundColor: `${THEME.colors.danger}15`,
     padding: 12,
     borderRadius: 8,
     marginBottom: 24,
-    fontFamily: THEME.typography.monoFont,
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: THEME.colors.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: THEME.radii.md,
+    borderRadius: 12,
   },
   retryText: {
     color: '#000000',

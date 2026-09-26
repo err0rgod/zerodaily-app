@@ -19,18 +19,32 @@ interface ThemeState {
   toggleTheme: () => Promise<void>;
 }
 
+/**
+ * Resolves a mode to a concrete light/dark decision.
+ *
+ * `Appearance.getColorScheme()` only ever reports the real OS scheme when
+ * app.json declares `userInterfaceStyle: "automatic"` — with "dark" the
+ * native layer pins the app to dark and this can never return light.
+ * A null scheme (web, some Android builds) falls back to dark.
+ */
 function resolveIsDark(mode: ThemeMode): boolean {
   if (mode === 'dark') return true;
   if (mode === 'light') return false;
-  // 'system'
-  const sys = Appearance.getColorScheme();
-  return sys !== 'light'; // Default to dark if system is null or dark
+  return Appearance.getColorScheme() === 'light' ? false : true;
 }
 
+/**
+ * Seeded synchronously from the OS so the very first painted frame is already
+ * on the correct side. `initTheme` then applies the stored preference once
+ * AsyncStorage resolves.
+ */
+const BOOT_MODE: ThemeMode = 'system';
+const BOOT_IS_DARK = resolveIsDark(BOOT_MODE);
+
 export const useThemeStore = create<ThemeState>((set, get) => ({
-  themeMode: 'dark',
-  isDark: true,
-  theme: DARK_THEME,
+  themeMode: BOOT_MODE,
+  isDark: BOOT_IS_DARK,
+  theme: BOOT_IS_DARK ? DARK_THEME : LIGHT_THEME,
   isInitialized: false,
 
   initTheme: async () => {
@@ -50,12 +64,7 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
       // Ignore storage read error
     }
 
-    set({
-      themeMode: 'dark',
-      isDark: true,
-      theme: DARK_THEME,
-      isInitialized: true,
-    });
+    set({ isInitialized: true });
   },
 
   setThemeMode: async (mode: ThemeMode) => {
@@ -78,6 +87,18 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
     await get().setThemeMode(nextMode);
   },
 }));
+
+// Follow live OS appearance changes, but only while the user is on 'system'.
+Appearance.addChangeListener(({ colorScheme }) => {
+  const { themeMode, isDark } = useThemeStore.getState();
+  if (themeMode !== 'system') return;
+  const nextIsDark = colorScheme === 'light' ? false : true;
+  if (nextIsDark === isDark) return;
+  useThemeStore.setState({
+    isDark: nextIsDark,
+    theme: nextIsDark ? DARK_THEME : LIGHT_THEME,
+  });
+});
 
 /** Convenient hook to access active theme and actions */
 export function useTheme() {

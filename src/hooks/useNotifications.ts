@@ -15,6 +15,9 @@ interface UseNotificationsOptions {
   onArticleSelected?: (article: Article) => void;
 }
 
+/** Foreground poll cadence for breaking-news alerts. */
+const BREAKING_POLL_INTERVAL_MS = 4 * 60 * 1000;
+
 /**
  * Hook to manage:
  * 1. FCM topic subscriptions & Android notification channel creation
@@ -216,18 +219,39 @@ export function useNotifications(options?: UseNotificationsOptions) {
       }
     };
 
+    // Poll only while the app is genuinely in the foreground — a backgrounded
+    // timer cannot present a banner, it just burns radio time.
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+    const startPolling = () => {
+      if (pollInterval) return;
+      pollInterval = setInterval(() => {
+        checkBreakingAlerts().catch(() => {});
+      }, BREAKING_POLL_INTERVAL_MS);
+    };
+
+    const stopPolling = () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    };
+
     // Check when user returns to app
     const appStateSub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
       if (nextState === 'active') {
         checkBreakingAlerts().catch(() => {});
         useSettingsStore.getState().syncSubscriptions().catch(() => {});
+        // Re-anchor the cadence so a resume does not leave a stale timer
+        // firing moments later.
+        stopPolling();
+        startPolling();
+      } else {
+        stopPolling();
       }
     });
 
-    // Check every 4 minutes while app is running
-    const pollInterval = setInterval(() => {
-      checkBreakingAlerts().catch(() => {});
-    }, 4 * 60 * 1000);
+    if (AppState.currentState === 'active') startPolling();
 
     return () => {
       if (receivedListener.current) {
@@ -241,7 +265,7 @@ export function useNotifications(options?: UseNotificationsOptions) {
         } catch {}
       }
       appStateSub.remove();
-      clearInterval(pollInterval);
+      stopPolling();
     };
   }, []);
 }

@@ -1,14 +1,8 @@
 import * as Haptics from 'expo-haptics';
 import { Bookmark, ExternalLink, Globe, RotateCcw, Share2 } from 'lucide-react-native';
-import React from 'react';
-import {
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import React, { useCallback, useMemo } from 'react';
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView } from 'react-native-gesture-handler';
 import { CATEGORIES } from '../../constants/categories';
 import { useBookmarkStore } from '../../store/bookmarkStore';
 import { useTheme } from '../../store/themeStore';
@@ -22,50 +16,58 @@ import { IconButton } from '../common/IconButton';
 interface NewsCardBackProps {
   article: Article;
   cardHeight: number;
+  isDark: boolean;
   onOpenSourceLink: (url: string) => void;
   onFlip?: () => void;
 }
 
-export const NewsCardBack: React.FC<NewsCardBackProps> = React.memo(({
+const NewsCardBackComponent: React.FC<NewsCardBackProps> = ({
   article,
   cardHeight,
+  isDark,
   onOpenSourceLink,
   onFlip,
 }) => {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const bookmarked = useBookmarkStore(
-    React.useCallback((s) => s.bookmarks.some((b) => b.id === article.id), [article.id])
+    useCallback((s) => s.bookmarks.some((b) => b.id === article.id), [article.id])
   );
   const toggleBookmark = useBookmarkStore((s) => s.toggleBookmark);
 
   const categoryMeta = CATEGORIES[article.category] || CATEGORIES.all;
-  const categoryAccent = article.category === 'all'
-    ? colors.primary
-    : (colors[article.category] || categoryMeta.accentColor);
+  const categoryAccent =
+    article.category === 'all'
+      ? colors.primary
+      : colors[article.category] || categoryMeta.accentColor;
 
-  const domain = extractDomain(article.link);
-  const relativeTime = formatRelativeTime(article.published_at);
+  const domain = useMemo(() => extractDomain(article.link), [article.link]);
+  const relativeTime = useMemo(
+    () => formatRelativeTime(article.published_at),
+    [article.published_at]
+  );
 
-  const rawSummary = article.fullSummary || article.shortSummary || '';
-  const paragraphs = rawSummary.split('\n\n').filter((p) => p.trim().length > 0);
+  const paragraphs = useMemo(() => {
+    const raw = article.fullSummary || article.shortSummary || '';
+    return raw.split('\n\n').filter((p) => p.trim().length > 0);
+  }, [article.fullSummary, article.shortSummary]);
 
-  const handleToggleBookmark = async () => {
+  const handleToggleBookmark = useCallback(async () => {
     if (Platform.OS !== 'web') {
       Haptics.selectionAsync().catch(() => {});
     }
     await toggleBookmark(article);
-  };
+  }, [toggleBookmark, article]);
 
-  const handleShare = () => {
+  const handleShare = useCallback(() => {
     shareArticle(article);
-  };
+  }, [article]);
 
-  const handleFlipPress = () => {
+  const handleFlipPress = useCallback(() => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     }
     onFlip?.();
-  };
+  }, [onFlip]);
 
   return (
     <View style={[styles.pageWrapper, { height: cardHeight, backgroundColor: colors.background }]}>
@@ -81,11 +83,21 @@ export const NewsCardBack: React.FC<NewsCardBackProps> = React.memo(({
           },
         ]}
       >
-        {/* 1. Header Bar: Category Badge, Read Mode Tag & Flip Back Button */}
-        <View style={[styles.headerBar, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
+        {/* Header: category, read mode, flip back */}
+        <View
+          style={[
+            styles.headerBar,
+            { borderBottomColor: colors.border, backgroundColor: colors.surface },
+          ]}
+        >
           <View style={styles.headerLeft}>
             <Badge label={categoryMeta.name} color={categoryAccent} size="sm" />
-            <View style={[styles.readModeChip, { backgroundColor: isDark ? '#161616' : '#F1F5F9', borderColor: colors.border }]}>
+            <View
+              style={[
+                styles.readModeChip,
+                { backgroundColor: isDark ? '#161616' : '#F1F5F9', borderColor: colors.border },
+              ]}
+            >
               <Text style={[styles.readModeText, { color: colors.textMuted }]}>SUMMARY</Text>
             </View>
             <Text style={[styles.timeText, { color: colors.textMuted }]}>{relativeTime}</Text>
@@ -94,31 +106,38 @@ export const NewsCardBack: React.FC<NewsCardBackProps> = React.memo(({
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={handleFlipPress}
-            style={[styles.flipBtn, { backgroundColor: isDark ? '#141414' : '#F1F5F9', borderColor: colors.border }]}
+            style={[
+              styles.flipBtn,
+              { backgroundColor: isDark ? '#141414' : '#F1F5F9', borderColor: colors.border },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Back to the story card"
           >
             <RotateCcw size={13} color={colors.primary} />
-            <Text style={[styles.flipBtnText, { color: colors.primary }]}>Flip</Text>
+            <Text style={[styles.flipBtnText, { color: colors.primary }]}>Back</Text>
           </TouchableOpacity>
         </View>
 
-        {/* 2. Editorial Headline & Full Story Content (NO IMAGE) */}
+        {/* Full untruncated headline and body — no image on the back face */}
         <ScrollView
           style={styles.scrollArea}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          nestedScrollEnabled
         >
-          {/* Full Untruncated Headline */}
-          <Text style={[styles.heading, { color: colors.textPrimary }]} maxFontSizeMultiplier={1.22}>
+          <Text
+            style={[styles.heading, { color: colors.textPrimary }]}
+            maxFontSizeMultiplier={1.22}
+          >
             {article.heading}
           </Text>
 
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-          {/* Formatted Story Paragraphs */}
           <View style={styles.paragraphsContainer}>
             {paragraphs.map((p, idx) => (
               <Text
-                key={idx}
+                key={`${article.id}-p${idx}`}
                 style={[styles.paragraph, { color: colors.textSecondary }]}
                 maxFontSizeMultiplier={1.2}
               >
@@ -126,17 +145,9 @@ export const NewsCardBack: React.FC<NewsCardBackProps> = React.memo(({
               </Text>
             ))}
           </View>
-
-          {/* Flip Hint */}
-          <View style={styles.flipCueRow}>
-            <RotateCcw size={12} color={colors.textMuted} />
-            <Text style={[styles.flipCueText, { color: colors.textMuted }]}>
-              Slide left or right to flip card back
-            </Text>
-          </View>
         </ScrollView>
 
-        {/* 3. Footer Actions Bar */}
+        {/* Footer actions */}
         <View
           style={[
             styles.footerContainer,
@@ -152,11 +163,10 @@ export const NewsCardBack: React.FC<NewsCardBackProps> = React.memo(({
               onPress={() => onOpenSourceLink(article.link)}
               style={[
                 styles.sourceButton,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                },
+                { backgroundColor: colors.surface, borderColor: colors.border },
               ]}
+              accessibilityRole="link"
+              accessibilityLabel={`Open source at ${domain}`}
             >
               <Globe size={13} color={colors.textMuted} />
               <Text
@@ -169,7 +179,9 @@ export const NewsCardBack: React.FC<NewsCardBackProps> = React.memo(({
               </Text>
               <ExternalLink size={12} color={colors.textMuted} />
             </TouchableOpacity>
-          ) : <View />}
+          ) : (
+            <View />
+          )}
 
           <View style={styles.actionButtonsRow}>
             <IconButton
@@ -183,18 +195,22 @@ export const NewsCardBack: React.FC<NewsCardBackProps> = React.memo(({
               onPress={handleToggleBookmark}
               size={36}
               active={bookmarked}
+              accessibilityLabel={bookmarked ? 'Remove bookmark' : 'Bookmark story'}
             />
             <IconButton
               icon={<Share2 size={17} color={colors.textPrimary} />}
               onPress={handleShare}
               size={36}
+              accessibilityLabel="Share story"
             />
           </View>
         </View>
       </View>
     </View>
   );
-});
+};
+
+export const NewsCardBack = React.memo(NewsCardBackComponent);
 
 const styles = StyleSheet.create({
   pageWrapper: {
@@ -225,6 +241,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     flexWrap: 'wrap',
+    flexShrink: 1,
   },
   readModeChip: {
     paddingHorizontal: 7,
@@ -246,7 +263,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 10,
-    paddingVertical: 4.5,
+    paddingVertical: 6,
     borderRadius: 9999,
     borderWidth: 1,
   },
@@ -260,7 +277,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 14,
-    paddingBottom: 20,
+    paddingBottom: 24,
   },
   heading: {
     fontSize: 21,
@@ -276,25 +293,13 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   paragraphsContainer: {
-    marginBottom: 16,
+    marginBottom: 4,
   },
   paragraph: {
     fontSize: 15.5,
     lineHeight: 25,
     marginBottom: 12,
     letterSpacing: 0.1,
-  },
-  flipCueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    opacity: 0.8,
-  },
-  flipCueText: {
-    fontSize: 11.5,
-    fontWeight: '500',
   },
   footerContainer: {
     flexDirection: 'row',

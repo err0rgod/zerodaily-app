@@ -2,9 +2,9 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Bookmark, ExternalLink, Globe, RotateCcw, Share2 } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Platform, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
-import { CATEGORIES, DEFAULT_FALLBACK_IMAGE, getDynamicFallbackImage } from '../../constants/categories';
+import { getDynamicFallbackImage } from '../../constants/categories';
 import { useBookmarkStore } from '../../store/bookmarkStore';
 import { useTheme } from '../../store/themeStore';
 import { Article, CategoryKey } from '../../types';
@@ -16,22 +16,36 @@ import { IconButton } from '../common/IconButton';
 interface NewsCardProps {
   article: Article;
   cardHeight: number;
+  /**
+   * 'full' renders the interactive front face.
+   * 'compact' renders a trimmed, non-interactive face for the cards stacked
+   * behind the active one — just enough to read as a deck without paying for
+   * a second gradient, footer and action row on every render.
+   */
+  variant?: 'full' | 'compact';
   onOpenFullRoast?: (article: Article) => void;
   onOpenSourceLink: (url: string) => void;
   onOpenImageViewer?: (imageUri: string, heading: string, category: CategoryKey) => void;
   onFlip?: () => void;
 }
 
-export const NewsCard: React.FC<NewsCardProps> = React.memo(({
+const NewsCardComponent: React.FC<NewsCardProps> = ({
   article,
   cardHeight,
+  variant = 'full',
   onOpenFullRoast,
   onOpenSourceLink,
   onOpenImageViewer,
   onFlip,
 }) => {
   const { colors, isDark } = useTheme();
-  const bookmarked = useBookmarkStore(React.useCallback((s) => s.bookmarks.some((b) => b.id === article.id), [article.id]));
+  const isFull = variant === 'full';
+
+  // Selector returns a boolean, so the default Object.is equality keeps this
+  // card from re-rendering when unrelated bookmarks change.
+  const bookmarked = useBookmarkStore(
+    useCallback((s) => s.bookmarks.some((b) => b.id === article.id), [article.id])
+  );
   const toggleBookmark = useBookmarkStore((s) => s.toggleBookmark);
 
   const { fontScale } = useWindowDimensions();
@@ -40,61 +54,71 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
 
   // Dynamically balance typography limits so large fonts never crowd out footer
   const headingLines = isLargeFont || isCompactScreen ? 2 : 3;
-  const summaryLines = isLargeFont ? 5 : (isCompactScreen ? 6 : 7);
+  const summaryLines = isLargeFont ? 5 : isCompactScreen ? 6 : 7;
 
-  const categoryMeta = CATEGORIES[article.category] || CATEGORIES.all;
   const dynamicFallback = getDynamicFallbackImage(article.id, article.category);
-  const categoryAccent = article.category === 'all'
-    ? colors.primary
-    : (colors[article.category] || categoryMeta.accentColor);
 
   const isValidUrl = Boolean(article.image_url && article.image_url.trim().length > 0);
   const [hasLoadError, setHasLoadError] = useState<boolean>(false);
-  const imageUri = (isValidUrl && !hasLoadError) ? article.image_url : dynamicFallback;
+  const imageUri = isValidUrl && !hasLoadError ? article.image_url : dynamicFallback;
 
   useEffect(() => {
     setHasLoadError(false);
   }, [article.id, article.image_url]);
 
-  const handleToggleBookmark = async () => {
+  const handleToggleBookmark = useCallback(async () => {
     await toggleBookmark(article);
-  };
+  }, [toggleBookmark, article]);
 
-  const handleShare = () => {
+  const handleShare = useCallback(() => {
     shareArticle(article);
+  }, [article]);
+
+  const handleFlip = useCallback(() => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    }
+    onFlip?.();
+  }, [onFlip]);
+
+  const handleLongPress = useCallback(() => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+    }
+    onOpenImageViewer?.(imageUri, article.heading, article.category);
+  }, [article.category, article.heading, imageUri, onOpenImageViewer]);
+
+  const domain = useMemo(() => extractDomain(article.link), [article.link]);
+  const relativeTime = useMemo(
+    () => formatRelativeTime(article.published_at),
+    [article.published_at]
+  );
+
+  const scrimColors = useMemo(
+    () =>
+      isDark
+        ? (['transparent', 'rgba(10, 10, 10, 0.45)', colors.card] as const)
+        : (['transparent', 'rgba(255, 255, 255, 0.45)', colors.card] as const),
+    [isDark, colors.card]
+  );
+
+  const cardSurface = {
+    backgroundColor: colors.card,
+    borderColor: colors.cardBorder,
+    shadowColor: isDark ? '#000000' : '#0F172A',
+    shadowOpacity: isDark ? 0.35 : 0.08,
+    elevation: isDark ? 2 : 4,
   };
-
-  const domain = extractDomain(article.link);
-  const relativeTime = formatRelativeTime(article.published_at);
-
-  const scrimColors = isDark
-    ? (['transparent', 'rgba(10, 10, 10, 0.45)', colors.card] as const)
-    : (['transparent', 'rgba(255, 255, 255, 0.45)', colors.card] as const);
 
   return (
     <View style={[styles.pageWrapper, { height: cardHeight, backgroundColor: colors.background }]}>
-      <View
-        style={[
-          styles.card,
-          {
-            backgroundColor: colors.card,
-            borderColor: colors.cardBorder,
-            shadowColor: isDark ? '#000000' : '#0F172A',
-            shadowOpacity: isDark ? 0.35 : 0.08,
-            elevation: isDark ? 2 : 4,
-          },
-        ]}
-      >
-        {/* 1. Hero Image with Theme-Adaptive Filling, Full Image Display (contain), 1.5s Long-Press Zoom */}
+      <View style={[styles.card, cardSurface]}>
+        {/* Hero image — 1.5s long-press opens the full-screen viewer */}
         <TouchableOpacity
           activeOpacity={0.94}
           delayLongPress={1500}
-          onLongPress={() => {
-            if (Platform.OS !== 'web') {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
-            }
-            onOpenImageViewer?.(imageUri, article.heading, article.category);
-          }}
+          onLongPress={handleLongPress}
+          disabled={!isFull}
           style={[
             styles.imageContainer,
             {
@@ -103,16 +127,14 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
             },
           ]}
         >
-          {/* Uncropped Full Foreground Image with Memory-Disk Cache Policy */}
           <Image
             source={{ uri: imageUri }}
             style={styles.image}
             contentFit="contain"
             cachePolicy="memory-disk"
+            transition={180}
             onError={() => {
-              if (!hasLoadError) {
-                setHasLoadError(true);
-              }
+              if (!hasLoadError) setHasLoadError(true);
             }}
           />
 
@@ -122,43 +144,48 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
             style={styles.gradientOverlay}
           />
 
-          {/* Floating Metadata Pill Row: ZERODAILY brand only + Reading metrics + Flip */}
-          <View style={styles.overlayRow}>
-            <View style={styles.brandBadge}>
-              <Text style={styles.brandTitle} maxFontSizeMultiplier={1.15}>ZERODAILY</Text>
-            </View>
-
-            <View style={styles.overlayRight}>
-              <View style={styles.metaChip}>
-                <Text style={styles.metaChipText} maxFontSizeMultiplier={1.15}>{relativeTime}</Text>
+          {isFull && (
+            <View style={styles.overlayRow}>
+              <View style={styles.brandBadge}>
+                <Text style={styles.brandTitle} maxFontSizeMultiplier={1.15}>
+                  ZERODAILY
+                </Text>
               </View>
 
-              <TouchableOpacity
-                activeOpacity={0.75}
-                onPress={() => {
-                  if (Platform.OS !== 'web') {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                  }
-                  onFlip?.();
-                }}
-                style={styles.flipChip}
-              >
-                <RotateCcw size={10} color="#FFFFFF" />
-                <Text style={styles.flipChipText}>Flip</Text>
-              </TouchableOpacity>
+              <View style={styles.overlayRight}>
+                <View style={styles.metaChip}>
+                  <Text style={styles.metaChipText} maxFontSizeMultiplier={1.15}>
+                    {relativeTime}
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  activeOpacity={0.75}
+                  onPress={handleFlip}
+                  style={styles.flipChip}
+                  accessibilityRole="button"
+                  accessibilityLabel="Read the full summary"
+                >
+                  <RotateCcw size={10} color="#FFFFFF" />
+                  <Text style={styles.flipChipText}>Summary</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          )}
         </TouchableOpacity>
 
-        {/* 2. Editorial Headline & Fully Extended Summary Body */}
+        {/* Editorial headline & summary */}
         <View style={styles.bodyContainer}>
           <TouchableOpacity
             activeOpacity={0.92}
             onPress={() => onOpenFullRoast?.(article)}
+            disabled={!isFull}
             style={styles.headlineAndSummary}
           >
             <Text
               style={[styles.heading, { color: colors.textPrimary }]}
+              numberOfLines={isFull ? undefined : headingLines}
+              ellipsizeMode={isFull ? undefined : 'tail'}
               maxFontSizeMultiplier={1.22}
             >
               {article.heading}
@@ -166,83 +193,76 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
 
             <Text
               style={[styles.summary, { color: colors.textSecondary }]}
-              numberOfLines={summaryLines}
+              numberOfLines={isFull ? summaryLines : 3}
               ellipsizeMode="tail"
               maxFontSizeMultiplier={1.22}
             >
               {article.shortSummary}
             </Text>
-
-            <View style={styles.swipeLeftCue}>
-              <RotateCcw size={11} color={colors.textMuted} />
-              <Text style={[styles.swipeLeftText, { color: colors.textMuted }]}>
-                Slide left or right to flip card ⇄
-              </Text>
-            </View>
           </TouchableOpacity>
         </View>
 
-        {/* 3. Refined Footer Actions Bar */}
-        <View
-          style={[
-            styles.footerContainer,
-            {
-              borderTopColor: colors.border,
-              backgroundColor: isDark ? 'rgba(0, 0, 0, 0.25)' : '#F8FAFC',
-            },
-          ]}
-        >
-          {/* Authentic Publisher Domain Tag */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => onOpenSourceLink(article.link)}
+        {isFull && (
+          <View
             style={[
-              styles.sourceButton,
+              styles.footerContainer,
               {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
+                borderTopColor: colors.border,
+                backgroundColor: isDark ? 'rgba(0, 0, 0, 0.25)' : '#F8FAFC',
               },
             ]}
           >
-            <Globe size={13} color={colors.textMuted} />
-            <Text
-              style={[styles.sourceButtonText, { color: colors.textSecondary }]}
-              numberOfLines={1}
-              ellipsizeMode="tail"
-              maxFontSizeMultiplier={1.15}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => onOpenSourceLink(article.link)}
+              style={[
+                styles.sourceButton,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+              accessibilityRole="link"
+              accessibilityLabel={`Open source at ${domain}`}
             >
-              {domain}
-            </Text>
-            <ExternalLink size={12} color={colors.textMuted} />
-          </TouchableOpacity>
+              <Globe size={13} color={colors.textMuted} />
+              <Text
+                style={[styles.sourceButtonText, { color: colors.textSecondary }]}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                maxFontSizeMultiplier={1.15}
+              >
+                {domain}
+              </Text>
+              <ExternalLink size={12} color={colors.textMuted} />
+            </TouchableOpacity>
 
-          {/* Bookmark & Share Actions */}
-          <View style={styles.actionButtonsRow}>
-            <IconButton
-              icon={
-                <Bookmark
-                  size={17}
-                  color={bookmarked ? colors.primary : colors.textPrimary}
-                  fill={bookmarked ? colors.primary : 'transparent'}
-                />
-              }
-              onPress={handleToggleBookmark}
-              size={36}
-              active={bookmarked}
-              style={styles.actionBtn}
-            />
-            <IconButton
-              icon={<Share2 size={17} color={colors.textPrimary} />}
-              onPress={handleShare}
-              size={36}
-              style={styles.actionBtn}
-            />
+            <View style={styles.actionButtonsRow}>
+              <IconButton
+                icon={
+                  <Bookmark
+                    size={17}
+                    color={bookmarked ? colors.primary : colors.textPrimary}
+                    fill={bookmarked ? colors.primary : 'transparent'}
+                  />
+                }
+                onPress={handleToggleBookmark}
+                size={36}
+                active={bookmarked}
+                accessibilityLabel={bookmarked ? 'Remove bookmark' : 'Bookmark story'}
+              />
+              <IconButton
+                icon={<Share2 size={17} color={colors.textPrimary} />}
+                onPress={handleShare}
+                size={36}
+                accessibilityLabel="Share story"
+              />
+            </View>
           </View>
-        </View>
+        )}
       </View>
     </View>
   );
-});
+};
+
+export const NewsCard = React.memo(NewsCardComponent);
 
 const styles = StyleSheet.create({
   pageWrapper: {
@@ -327,8 +347,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 3.5,
     backgroundColor: 'rgba(16, 185, 129, 0.85)',
-    paddingHorizontal: 8,
-    paddingVertical: 3.5,
+    paddingHorizontal: 9,
+    paddingVertical: 4.5,
     borderRadius: 9999,
   },
   flipChipText: {
@@ -360,16 +380,6 @@ const styles = StyleSheet.create({
     lineHeight: 22.5,
     letterSpacing: 0.1,
   },
-  swipeLeftCue: {
-    marginTop: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  swipeLeftText: {
-    fontSize: 11,
-    fontWeight: '500',
-    letterSpacing: 0.2,
-  },
   footerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -400,5 +410,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  actionBtn: {},
 });
