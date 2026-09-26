@@ -1,4 +1,5 @@
 import {
+  AccountDeletionResult,
   Article,
   AuthResponse,
   CategoryKey,
@@ -421,6 +422,39 @@ export async function syncUserBookmarks(
   } catch (error) {
     console.warn('[ZeroDaily API] syncUserBookmarks failed:', error);
     return bookmarks;
+  }
+}
+
+/**
+ * Schedules account deletion with a 1-day (24-hour) recovery grace period.
+ * Conforms to DELETE /api/v1/auth/account.
+ */
+export async function deleteUserAccount(token: string): Promise<AccountDeletionResult> {
+  if (!token) {
+    return { status: 'error', message: 'No authentication token provided.' };
+  }
+  try {
+    const response = await fetchWithTimeout(ENDPOINTS.AUTH_DELETE_ACCOUNT, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const json = await response.json();
+    if (!response.ok) {
+      return {
+        status: 'error',
+        message: json?.detail || 'Failed to request account deletion.',
+      };
+    }
+    return json;
+  } catch (error: any) {
+    return {
+      status: 'error',
+      message: error?.message || 'Network error requesting account deletion.',
+    };
   }
 }
 

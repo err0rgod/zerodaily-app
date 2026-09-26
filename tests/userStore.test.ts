@@ -113,6 +113,17 @@ jest.mock('../src/api/client', () => ({
     algo_weights: { ai: 1.45, cybersec: 1.2 },
   })),
   syncUserBookmarks: jest.fn(async (token, bookmarks, mode) => bookmarks),
+  deleteUserAccount: jest.fn(async (token: string) => {
+    if (token === 'error_token') {
+      return { status: 'error', message: 'Failed to delete account' };
+    }
+    return {
+      status: 'success',
+      message: 'Account scheduled for deletion in 24 hours. Log back in to reactivate.',
+      deletion_scheduled_at: '2026-09-27T12:00:00Z',
+      is_pending_deletion: true,
+    };
+  }),
 }));
 
 describe('UserStore & Authentication State Machine', () => {
@@ -298,5 +309,56 @@ describe('UserStore & Authentication State Machine', () => {
 
     const state = useUserStore.getState();
     expect(state.user?.topic_preferences.cybersec).toBe(false);
+  });
+
+  test('deleteAccount schedules deletion, wipes user session & bookmarks, and provisions fresh guest session', async () => {
+    useUserStore.setState({
+      token: 'mock_login_token_789',
+      user: mockPermUser,
+      isAuthenticated: true,
+      isGuest: false,
+    });
+    mockStorage['@zerodaily_auth_token'] = 'mock_login_token_789';
+    mockStorage['@zerodaily_user_profile'] = JSON.stringify(mockPermUser);
+
+    const res = await useUserStore.getState().deleteAccount();
+    expect(res.success).toBe(true);
+    expect(res.message).toContain('24 hours');
+
+    const state = useUserStore.getState();
+    expect(state.isAuthenticated).toBe(false);
+    expect(state.isGuest).toBe(true);
+    expect(state.token).toBe('mock_guest_token_abc');
+    expect(state.user?.is_anonymous).toBe(true);
+    expect(mockStorage['@zerodaily_auth_token']).toBe('mock_guest_token_abc');
+  });
+
+  test('deleteAccount fails gracefully when backend returns error', async () => {
+    useUserStore.setState({
+      token: 'error_token',
+      user: mockPermUser,
+      isAuthenticated: true,
+      isGuest: false,
+    });
+
+    const res = await useUserStore.getState().deleteAccount();
+    expect(res.success).toBe(false);
+    expect(res.message).toBe('Failed to delete account');
+
+    const state = useUserStore.getState();
+    expect(state.isAuthenticated).toBe(true);
+    expect(state.token).toBe('error_token');
+  });
+
+  test('deleteAccount returns failure if user is not authenticated', async () => {
+    useUserStore.setState({
+      token: null,
+      user: null,
+      isAuthenticated: false,
+    });
+
+    const res = await useUserStore.getState().deleteAccount();
+    expect(res.success).toBe(false);
+    expect(res.message).toBe('Not authenticated');
   });
 });

@@ -15,6 +15,7 @@ import {
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -117,6 +118,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }
         resetForm();
         onClose();
+        if (result.message) {
+          Alert.alert('Account Restored', result.message);
+        }
       } else {
         setErrorMessage(result.error || 'Failed to sign in.');
       }

@@ -40,5 +40,6 @@ export const ENDPOINTS = {
   AUTH_PREFERENCES: `${API_BASE_URL}/api/v1/auth/preferences`,
   AUTH_TRACK: `${API_BASE_URL}/api/v1/auth/track`,
   AUTH_SYNC_BOOKMARKS: `${API_BASE_URL}/api/v1/auth/sync-bookmarks`,
+  AUTH_DELETE_ACCOUNT: `${API_BASE_URL}/api/v1/auth/account`,
 } as const;
 

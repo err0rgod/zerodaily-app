@@ -117,6 +117,17 @@ export interface UserProfile {
   algo_weights: Record<string, number>;
   bookmarked_articles: string[];
   reading_count: number;
+  is_pending_deletion?: boolean;
+  deletion_scheduled_at?: string | null;
+  account_restored?: boolean;
+}
+
+/** Account deletion response envelope */
+export interface AccountDeletionResult {
+  status: 'success' | 'error';
+  message: string;
+  deletion_scheduled_at?: string;
+  is_pending_deletion?: boolean;
 }
 
 /** Authentication response envelope */

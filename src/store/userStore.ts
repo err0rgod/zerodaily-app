@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import {
   createGuestSession,
+  deleteUserAccount,
   fetchCurrentUser,
   fetchCurrentUserResult,
   loginUser,
@@ -36,8 +37,9 @@ interface UserState {
 
   // Authentication
   signUp: (email: string, password: string, displayName?: string) => Promise<{ success: boolean; error?: string }>;
-  signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string; message?: string }>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<{ success: boolean; message?: string }>;
 
   // Preferences & Algorithmic Tracking
   updatePreferences: (preferences: Record<string, boolean>) => Promise<void>;
@@ -180,7 +182,7 @@ export const useUserStore = create<UserState>((set, get) => ({
         isLoading: false,
       });
 
-      return { success: true };
+      return { success: true, message: res.message };
     }
 
     set({ isLoading: false });
@@ -216,6 +218,52 @@ export const useUserStore = create<UserState>((set, get) => ({
     } catch (err) {
       console.warn('[ZeroDaily UserStore] Sign out error:', err);
       set({ isLoading: false });
+    }
+  },
+
+  deleteAccount: async () => {
+    set({ isLoading: true });
+    const { token } = get();
+    if (!token) {
+      set({ isLoading: false });
+      return { success: false, message: 'Not authenticated' };
+    }
+
+    try {
+      const res = await deleteUserAccount(token);
+      if (res.status === 'success') {
+        // Clear saved user credentials and local bookmarks
+        await AsyncStorage.multiRemove([STORAGE_KEYS.TOKEN, STORAGE_KEYS.USER]);
+        await useBookmarkStore.getState().clearAllBookmarks().catch(() => {});
+
+        set({ user: null, token: null, isAuthenticated: false, isGuest: true });
+
+        // Seamlessly provision a fresh guest session
+        const guestRes = await createGuestSession();
+        if (guestRes.status === 'success') {
+          await Promise.all([
+            AsyncStorage.setItem(STORAGE_KEYS.TOKEN, guestRes.access_token),
+            AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(guestRes.user)),
+          ]);
+          set({
+            token: guestRes.access_token,
+            user: guestRes.user,
+            isGuest: true,
+            isAuthenticated: false,
+            isLoading: false,
+          });
+        } else {
+          set({ isLoading: false });
+        }
+
+        return { success: true, message: res.message };
+      } else {
+        set({ isLoading: false });
+        return { success: false, message: res.message || 'Failed to delete account' };
+      }
+    } catch (err: any) {
+      set({ isLoading: false });
+      return { success: false, message: err?.message || 'Error deleting account' };
     }
   },
 

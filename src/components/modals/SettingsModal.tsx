@@ -52,7 +52,7 @@ let cachedFcmToken: string | null = null;
 export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }) => {
   const { preferences, toggleCategoryNotification, toggleBreakingAll } = useSettingsStore();
   const { colors, themeMode, setThemeMode, isDark } = useTheme();
-  const { user, isAuthenticated, isGuest, signOut, openAuthModal } = useUserStore();
+  const { user, isAuthenticated, isGuest, signOut, deleteAccount, openAuthModal } = useUserStore();
   const [isSendingTest, setIsSendingTest] = useState<boolean>(false);
   const [fcmToken, setFcmToken] = useState<string | null>(cachedFcmToken);
   const [isCheckingFcm, setIsCheckingFcm] = useState<boolean>(false);
@@ -72,6 +72,34 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
             }
             await signOut();
+          },
+        },
+      ]
+    );
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'Are you sure you want to delete your account? You will have a 24-hour grace period to log back in to cancel deletion and reactivate your account. After 24 hours, your account and saved roasts will be permanently deleted.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Account',
+          style: 'destructive',
+          onPress: async () => {
+            if (Platform.OS !== 'web') {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+            }
+            const res = await deleteAccount();
+            if (res.success) {
+              Alert.alert(
+                'Account Deletion Scheduled',
+                res.message || 'Your account is scheduled for deletion. You have 24 hours to log back in to cancel deletion and restore your account.'
+              );
+            } else {
+              Alert.alert('Error', res.message || 'Could not schedule account deletion.');
+            }
           },
         },
       ]
@@ -231,17 +259,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                     </View>
                   </View>
 
-                  <TouchableOpacity
-                    activeOpacity={0.75}
-                    onPress={handleSignOut}
-                    style={[
-                      styles.signOutBtn,
-                      { borderColor: `${colors.danger}40`, backgroundColor: `${colors.danger}10` },
-                    ]}
-                  >
-                    <LogOut size={15} color={colors.danger} />
-                    <Text style={[styles.signOutBtnText, { color: colors.danger }]}>Sign Out</Text>
-                  </TouchableOpacity>
+                  <View style={styles.accountActionsRow}>
+                    <TouchableOpacity
+                      activeOpacity={0.75}
+                      onPress={handleSignOut}
+                      style={[
+                        styles.signOutBtn,
+                        { borderColor: `${colors.textSecondary}40`, backgroundColor: `${colors.textSecondary}10` },
+                      ]}
+                    >
+                      <LogOut size={15} color={colors.textSecondary} />
+                      <Text style={[styles.signOutBtnText, { color: colors.textSecondary }]}>Sign Out</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      activeOpacity={0.75}
+                      onPress={handleDeleteAccount}
+                      style={[
+                        styles.deleteAccountBtn,
+                        { borderColor: `${colors.danger}40`, backgroundColor: `${colors.danger}10` },
+                      ]}
+                    >
+                      <Trash2 size={15} color={colors.danger} />
+                      <Text style={[styles.deleteAccountBtnText, { color: colors.danger }]}>Delete Account</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               ) : (
                 <View style={styles.accountContent}>
@@ -594,17 +636,39 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  accountActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 4,
+  },
   signOutBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     borderRadius: 10,
     borderWidth: 1,
   },
   signOutBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  deleteAccountBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  deleteAccountBtnText: {
     fontSize: 13,
     fontWeight: '600',
   },
