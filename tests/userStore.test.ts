@@ -124,6 +124,28 @@ jest.mock('../src/api/client', () => ({
       is_pending_deletion: true,
     };
   }),
+  loginWithFirebase: jest.fn(async (idToken: string, guestUserId?: string) => {
+    if (idToken === 'invalid_token') {
+      return {
+        status: 'error',
+        access_token: '',
+        token_type: 'bearer',
+        user: {} as any,
+        message: 'Invalid Firebase ID token',
+      };
+    }
+    return {
+      status: 'success',
+      access_token: 'mock_firebase_jwt_token',
+      token_type: 'bearer',
+      user: {
+        ...mockPermUser,
+        user_id: 'fb_google_123',
+        email: 'googleuser@gmail.com',
+      },
+      message: idToken === 'restored_token' ? 'Welcome back! Your account has been restored.' : undefined,
+    };
+  }),
 }));
 
 describe('UserStore & Authentication State Machine', () => {
@@ -360,5 +382,37 @@ describe('UserStore & Authentication State Machine', () => {
     const res = await useUserStore.getState().deleteAccount();
     expect(res.success).toBe(false);
     expect(res.message).toBe('Not authenticated');
+  });
+
+  test('signInWithFirebase saves tokens and updates authentication state', async () => {
+    useUserStore.setState({
+      token: 'guest_token_123',
+      user: { ...mockPermUser, user_id: 'guest_123', is_anonymous: true },
+      isGuest: true,
+      isAuthenticated: false,
+    });
+
+    const res = await useUserStore.getState().signInWithFirebase('valid_google_token');
+    expect(res.success).toBe(true);
+    expect(res.message).toBeUndefined();
+
+    const state = useUserStore.getState();
+    expect(state.isAuthenticated).toBe(true);
+    expect(state.isGuest).toBe(false);
+    expect(state.token).toBe('mock_firebase_jwt_token');
+    expect(state.user?.user_id).toBe('fb_google_123');
+    expect(mockStorage['@zerodaily_auth_token']).toBe('mock_firebase_jwt_token');
+  });
+
+  test('signInWithFirebase surfaces account restoration message', async () => {
+    const res = await useUserStore.getState().signInWithFirebase('restored_token');
+    expect(res.success).toBe(true);
+    expect(res.message).toContain('restored');
+  });
+
+  test('signInWithFirebase handles error response gracefully', async () => {
+    const res = await useUserStore.getState().signInWithFirebase('invalid_token');
+    expect(res.success).toBe(false);
+    expect(res.error).toBe('Invalid Firebase ID token');
   });
 });

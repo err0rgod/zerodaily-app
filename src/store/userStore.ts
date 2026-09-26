@@ -6,6 +6,7 @@ import {
   fetchCurrentUser,
   fetchCurrentUserResult,
   loginUser,
+  loginWithFirebase,
   registerUser,
   syncUserBookmarks,
   trackUserEvent,
@@ -38,6 +39,7 @@ interface UserState {
   // Authentication
   signUp: (email: string, password: string, displayName?: string) => Promise<{ success: boolean; error?: string }>;
   signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string; message?: string }>;
+  signInWithFirebase: (idToken: string) => Promise<{ success: boolean; error?: string; message?: string }>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<{ success: boolean; message?: string }>;
 
@@ -187,6 +189,32 @@ export const useUserStore = create<UserState>((set, get) => ({
 
     set({ isLoading: false });
     return { success: false, error: res.message || 'Login failed' };
+  },
+
+  signInWithFirebase: async (idToken: string) => {
+    set({ isLoading: true });
+    const currentGuestId = get().isGuest ? get().user?.user_id : undefined;
+    const res = await loginWithFirebase(idToken, currentGuestId);
+
+    if (res.status === 'success' && res.access_token) {
+      await Promise.all([
+        AsyncStorage.setItem(STORAGE_KEYS.TOKEN, res.access_token),
+        AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(res.user)),
+      ]);
+
+      set({
+        token: res.access_token,
+        user: res.user,
+        isGuest: false,
+        isAuthenticated: true,
+        isLoading: false,
+      });
+
+      return { success: true, message: res.message };
+    }
+
+    set({ isLoading: false });
+    return { success: false, error: res.message || 'Firebase authentication failed' };
   },
 
   signOut: async () => {

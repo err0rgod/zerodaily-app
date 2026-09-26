@@ -254,6 +254,46 @@ export async function loginUser(
 }
 
 /**
+ * Exchanges a Firebase Auth ID token for a ZeroDaily user session.
+ * Conforms to POST /api/v1/auth/firebase-login.
+ */
+export async function loginWithFirebase(
+  idToken: string,
+  guestUserId?: string
+): Promise<AuthResponse> {
+  try {
+    const response = await fetchWithTimeout(ENDPOINTS.AUTH_FIREBASE_LOGIN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id_token: idToken,
+        guest_user_id: guestUserId,
+      }),
+    });
+
+    const json = await response.json();
+    if (!response.ok) {
+      return {
+        status: 'error',
+        access_token: '',
+        token_type: 'bearer',
+        user: {} as UserProfile,
+        message: json?.detail || 'Failed to authenticate with Firebase.',
+      };
+    }
+    return json;
+  } catch (error: any) {
+    return {
+      status: 'error',
+      access_token: '',
+      token_type: 'bearer',
+      user: {} as UserProfile,
+      message: error?.message || 'Network error during Firebase authentication.',
+    };
+  }
+}
+
+/**
  * Creates an anonymous guest user account for immediate feed personalization.
  * Conforms to POST /api/v1/auth/guest.
  */

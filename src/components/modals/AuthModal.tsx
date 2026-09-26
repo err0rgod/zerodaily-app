@@ -119,7 +119,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         resetForm();
         onClose();
         if (result.message) {
-          Alert.alert('Account Restored', result.message);
+          setTimeout(() => {
+            Alert.alert('Account Restored', result.message);
+          }, 350);
         }
       } else {
         setErrorMessage(result.error || 'Failed to sign in.');

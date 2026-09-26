@@ -52,7 +52,7 @@ let cachedFcmToken: string | null = null;
 export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }) => {
   const { preferences, toggleCategoryNotification, toggleBreakingAll } = useSettingsStore();
   const { colors, themeMode, setThemeMode, isDark } = useTheme();
-  const { user, isAuthenticated, isGuest, signOut, deleteAccount, openAuthModal } = useUserStore();
+  const { user, isAuthenticated, isGuest, isLoading, signOut, deleteAccount, openAuthModal } = useUserStore();
   const [isSendingTest, setIsSendingTest] = useState<boolean>(false);
   const [fcmToken, setFcmToken] = useState<string | null>(cachedFcmToken);
   const [isCheckingFcm, setIsCheckingFcm] = useState<boolean>(false);
@@ -263,9 +263,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                     <TouchableOpacity
                       activeOpacity={0.75}
                       onPress={handleSignOut}
+                      disabled={isLoading}
                       style={[
                         styles.signOutBtn,
                         { borderColor: `${colors.textSecondary}40`, backgroundColor: `${colors.textSecondary}10` },
+                        isLoading && { opacity: 0.6 },
                       ]}
                     >
                       <LogOut size={15} color={colors.textSecondary} />
@@ -275,9 +277,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                     <TouchableOpacity
                       activeOpacity={0.75}
                       onPress={handleDeleteAccount}
+                      disabled={isLoading}
                       style={[
                         styles.deleteAccountBtn,
                         { borderColor: `${colors.danger}40`, backgroundColor: `${colors.danger}10` },
+                        isLoading && { opacity: 0.6 },
                       ]}
                     >
                       <Trash2 size={15} color={colors.danger} />
