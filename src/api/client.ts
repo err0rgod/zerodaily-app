@@ -11,7 +11,7 @@ import {
   TrackingResponse,
   UserProfile,
 } from '../types';
-import { ENDPOINTS } from './endpoints';
+import { ENDPOINTS, FIREBASE_AUTH_ENDPOINTS } from './endpoints';
 
 const REQUEST_TIMEOUT_MS = 6000;
 
@@ -168,8 +168,9 @@ export async function unsubscribeFromTopics(token: string, topics: string[]): Pr
 }
 
 /**
- * Register a permanent user account.
- * Conforms to POST /api/v1/auth/register.
+ * Register a permanent user account using Firebase Auth.
+ * 1. Creates the user credentials securely in Firebase Auth.
+ * 2. Exchanges the Firebase ID Token with ZeroDaily backend to provision profile and merge guest data.
  */
 export async function registerUser(
   email: string,
@@ -178,28 +179,58 @@ export async function registerUser(
   guestUserId?: string
 ): Promise<AuthResponse> {
   try {
-    const response = await fetchWithTimeout(ENDPOINTS.AUTH_REGISTER, {
+    // 1. Create user in Firebase Auth via Identity Toolkit
+    const fbResponse = await fetchWithTimeout(FIREBASE_AUTH_ENDPOINTS.SIGN_UP, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email,
         password,
-        display_name: displayName,
-        guest_user_id: guestUserId,
+        returnSecureToken: true,
       }),
     });
 
-    const json = await response.json();
-    if (!response.ok) {
+    const fbJson = await fbResponse.json();
+    if (!fbResponse.ok) {
+      const errCode = fbJson?.error?.message || 'REGISTRATION_FAILED';
+      let userFriendly = 'Registration failed. Please check your credentials.';
+      if (errCode.includes('EMAIL_EXISTS')) {
+        userFriendly = 'An account with this email already exists. Please sign in instead.';
+      } else if (errCode.includes('WEAK_PASSWORD')) {
+        userFriendly = 'Password should be at least 6 characters.';
+      } else if (errCode.includes('INVALID_EMAIL')) {
+        userFriendly = 'Please enter a valid email address.';
+      }
       return {
         status: 'error',
         access_token: '',
         token_type: 'bearer',
         user: {} as UserProfile,
-        message: json?.detail || 'Registration failed. Please check credentials.',
+        message: userFriendly,
       };
     }
-    return json;
+
+    const idToken = fbJson.idToken;
+
+    // Optional: update display name on Firebase profile if provided
+    if (displayName && idToken) {
+      try {
+        await fetchWithTimeout(FIREBASE_AUTH_ENDPOINTS.UPDATE_PROFILE, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            idToken,
+            displayName,
+            returnSecureToken: true,
+          }),
+        });
+      } catch (updateErr) {
+        console.warn('[ZeroDaily API] Firebase profile name update note:', updateErr);
+      }
+    }
+
+    // 2. Exchange Firebase Auth ID token with ZeroDaily backend
+    return await loginWithFirebase(idToken, guestUserId);
   } catch (error: any) {
     return {
       status: 'error',
@@ -212,8 +243,9 @@ export async function registerUser(
 }
 
 /**
- * Log in to an existing account with email & password.
- * Conforms to POST /api/v1/auth/login.
+ * Log in to an existing account with email & password using Firebase Auth.
+ * 1. Authenticates credentials against Firebase Auth.
+ * 2. Exchanges the Firebase ID Token with ZeroDaily backend to load profile and merge guest data.
  */
 export async function loginUser(
   email: string,
@@ -221,27 +253,45 @@ export async function loginUser(
   guestUserId?: string
 ): Promise<AuthResponse> {
   try {
-    const response = await fetchWithTimeout(ENDPOINTS.AUTH_LOGIN, {
+    // 1. Authenticate with Firebase Auth via Identity Toolkit
+    const fbResponse = await fetchWithTimeout(FIREBASE_AUTH_ENDPOINTS.SIGN_IN, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email,
         password,
-        guest_user_id: guestUserId,
+        returnSecureToken: true,
       }),
     });
 
-    const json = await response.json();
-    if (!response.ok) {
+    const fbJson = await fbResponse.json();
+    if (!fbResponse.ok) {
+      const errCode = fbJson?.error?.message || 'LOGIN_FAILED';
+      let userFriendly = 'Invalid email or password.';
+      if (
+        errCode.includes('EMAIL_NOT_FOUND') ||
+        errCode.includes('INVALID_LOGIN_CREDENTIALS') ||
+        errCode.includes('INVALID_PASSWORD')
+      ) {
+        userFriendly = 'Invalid email or password.';
+      } else if (errCode.includes('USER_DISABLED')) {
+        userFriendly = 'This user account has been disabled.';
+      } else if (errCode.includes('TOO_MANY_ATTEMPTS')) {
+        userFriendly = 'Too many failed login attempts. Please try again later.';
+      }
       return {
         status: 'error',
         access_token: '',
         token_type: 'bearer',
         user: {} as UserProfile,
-        message: json?.detail || 'Invalid email or password.',
+        message: userFriendly,
       };
     }
-    return json;
+
+    const idToken = fbJson.idToken;
+
+    // 2. Exchange Firebase Auth ID token with ZeroDaily backend
+    return await loginWithFirebase(idToken, guestUserId);
   } catch (error: any) {
     return {
       status: 'error',
@@ -250,6 +300,34 @@ export async function loginUser(
       user: {} as UserProfile,
       message: error?.message || 'Network error during login.',
     };
+  }
+}
+
+/**
+ * Sends a password reset email via Firebase Auth.
+ */
+export async function sendPasswordResetEmail(email: string): Promise<{ success: boolean; message: string }> {
+  try {
+    const response = await fetchWithTimeout(FIREBASE_AUTH_ENDPOINTS.RESET_PASSWORD, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requestType: 'PASSWORD_RESET',
+        email,
+      }),
+    });
+
+    const json = await response.json();
+    if (!response.ok) {
+      const errCode = json?.error?.message || '';
+      if (errCode.includes('EMAIL_NOT_FOUND')) {
+        return { success: false, message: 'No account found with this email address.' };
+      }
+      return { success: false, message: 'Failed to send password reset email. Please try again.' };
+    }
+    return { success: true, message: 'Password reset link sent to your email.' };
+  } catch (error: any) {
+    return { success: false, message: error?.message || 'Network error sending password reset.' };
   }
 }
 
