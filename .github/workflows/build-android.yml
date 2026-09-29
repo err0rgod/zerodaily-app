@@ -4,13 +4,6 @@ on:
   push:
     tags:
       - 'v*'
-    branches:
-      - main
-    paths:
-      - 'package.json'
-  release:
-    types:
-      - published
   workflow_dispatch:
     inputs:
       build_type:
