@@ -8,8 +8,8 @@ import { THEME } from './theme';
 export const CATEGORIES: Record<CategoryKey, CategoryMeta> = {
   all: {
     key: 'all',
-    name: 'Top Feed',
-    description: 'Unified chronological feed across all tech domains.',
+    name: 'Hot 🔥',
+    description: 'Trending and hottest stories across all tech domains.',
     badgeColor: THEME.colors.primary,
     accentColor: THEME.colors.primary,
     fcmTopic: 'topic_breaking_all',

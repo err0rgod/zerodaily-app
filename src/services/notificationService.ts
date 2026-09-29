@@ -139,7 +139,7 @@ export async function scheduleTestBreakingAlert(
 
   const testAlerts: Record<CategoryKey, { heading: string; punchline: string; id: string; image: string }> = {
     all: {
-      heading: 'ZeroDaily Top Feed: Global Infrastructure Report Live',
+      heading: 'ZeroDaily Hot 🔥: Global Infrastructure Report Live',
       punchline: 'Breaking tech summary across all 7 domains',
       id: 'https://thehackernews.com/2026/09/crowdstrike-kernel-driver-meltdown.html',
       image: 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=800&auto=format&fit=crop&q=80',

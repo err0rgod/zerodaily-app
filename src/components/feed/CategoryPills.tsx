@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { CATEGORY_LIST } from '../../constants/categories';
 import { useTheme } from '../../store/themeStore';
@@ -14,10 +14,23 @@ export const CategoryPills: React.FC<CategoryPillsProps> = React.memo(({
   onSelectCategory,
 }) => {
   const { colors } = useTheme();
+  const scrollRef = useRef<ScrollView>(null);
+  const pillLayouts = useRef<Record<string, { x: number; width: number }>>({});
+
+  useEffect(() => {
+    const layout = pillLayouts.current[activeCategory];
+    if (layout && scrollRef.current) {
+      scrollRef.current.scrollTo({
+        x: Math.max(0, layout.x - 30),
+        animated: true,
+      });
+    }
+  }, [activeCategory]);
 
   return (
     <View style={[styles.wrapper, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
       <ScrollView
+        ref={scrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.container}
@@ -30,6 +43,16 @@ export const CategoryPills: React.FC<CategoryPillsProps> = React.memo(({
             <TouchableOpacity
               key={item.key}
               activeOpacity={0.7}
+              onLayout={(e) => {
+                const { x, width } = e.nativeEvent.layout;
+                pillLayouts.current[item.key] = { x, width };
+                if (item.key === activeCategory && scrollRef.current) {
+                  scrollRef.current.scrollTo({
+                    x: Math.max(0, x - 30),
+                    animated: false,
+                  });
+                }
+              }}
               onPress={() => onSelectCategory(item.key)}
               style={[
                 styles.pill,

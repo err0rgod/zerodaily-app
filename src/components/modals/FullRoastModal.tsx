@@ -42,6 +42,16 @@ export const FullRoastModal: React.FC<FullRoastModalProps> = ({
   const toggleBookmark = useBookmarkStore((s) => s.toggleBookmark);
 
   const [hasLoadError, setHasLoadError] = useState<boolean>(false);
+  const [scrollKey, setScrollKey] = useState<number>(0);
+
+  useEffect(() => {
+    if (visible) {
+      const timer = setTimeout(() => {
+        setScrollKey((k) => k + 1);
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [visible]);
 
   useEffect(() => {
     setHasLoadError(false);
@@ -85,6 +95,9 @@ export const FullRoastModal: React.FC<FullRoastModalProps> = ({
       animationType="slide"
       presentationStyle="pageSheet"
       onRequestClose={handleClose}
+      onShow={() => {
+        setScrollKey((k) => k + 1);
+      }}
     >
       <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
         <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -100,7 +113,6 @@ export const FullRoastModal: React.FC<FullRoastModalProps> = ({
 
             <View style={styles.headerTitleContainer}>
               <Text style={[styles.headerBrand, { color: colors.textPrimary }]}>ZERODAILY</Text>
-              <Text style={[styles.headerSub, { color: colors.textMuted }]}>Full Story</Text>
             </View>
 
             <View style={styles.headerActions}>
@@ -134,11 +146,14 @@ export const FullRoastModal: React.FC<FullRoastModalProps> = ({
           </View>
 
           <ScrollView
+            key={scrollKey}
             style={styles.scrollArea}
-            contentContainerStyle={styles.contentContainer}
-            showsVerticalScrollIndicator={false}
+            contentContainerStyle={[styles.contentContainer, { flexGrow: 1 }]}
+            showsVerticalScrollIndicator={true}
             nestedScrollEnabled={true}
             keyboardShouldPersistTaps="handled"
+            bounces={true}
+            alwaysBounceVertical={true}
           >
             {/* Hero Image */}
             <View
@@ -249,13 +264,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerBrand: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '900',
-    letterSpacing: 1.2,
-  },
-  headerSub: {
-    fontSize: 11,
-    fontWeight: '500',
+    letterSpacing: 1.5,
   },
   headerActions: {
     flexDirection: 'row',

@@ -86,6 +86,11 @@ jobs:
       - name: Expo Prebuild (Generate Native Android Project)
         run: npx expo prebuild --platform android --clean --no-install
 
+      - name: Restore Persistent Signing Keystore
+        run: |
+          cp credentials/zerodaily.keystore android/app/debug.keystore
+          echo "Restored persistent signing keystore with SHA-1 3D:A0:49:C5:AF:E4:32:1E:CA:5E:32:11:11:B7:3B:51:B8:57:B4:18"
+
       - name: Cache Gradle Packages
         uses: actions/cache@v4
         with:

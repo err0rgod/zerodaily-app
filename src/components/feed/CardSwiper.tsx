@@ -14,7 +14,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { CATEGORIES, getDynamicFallbackImage } from '../../constants/categories';
+import { CATEGORIES, CATEGORY_LIST, getDynamicFallbackImage } from '../../constants/categories';
 import { useFeedStore } from '../../store/feedStore';
 import { useTheme } from '../../store/themeStore';
 import { useUserStore } from '../../store/userStore';
@@ -45,6 +45,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     isRefreshing,
     loadInitialFeed,
     isLoading,
+    setCategory,
   } = useFeedStore();
 
   const { colors, isDark } = useTheme();
@@ -63,8 +64,35 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
   const containerHeightRef = useRef<number>(containerHeight);
   containerHeightRef.current = containerHeight;
 
+  const categoryRef = useRef<CategoryKey>(category);
+  categoryRef.current = category;
+
   const isAnimatingRef = useRef<boolean>(false);
   const panY = useRef(new Animated.Value(0)).current;
+  const panX = useRef(new Animated.Value(0)).current;
+  const gestureAxisRef = useRef<'vertical' | 'horizontal' | null>(null);
+  const gestureStartXRef = useRef<number>(0);
+
+  const handleSwitchCategory = useCallback((direction: 'next' | 'prev') => {
+    const currCat = categoryRef.current;
+    const currIndex = CATEGORY_LIST.findIndex((c) => c.key === currCat);
+    if (currIndex === -1) return;
+
+    let targetIndex: number;
+    if (direction === 'next') {
+      targetIndex = currIndex + 1;
+      if (targetIndex >= CATEGORY_LIST.length) return;
+    } else {
+      targetIndex = currIndex - 1;
+      if (targetIndex < 0) return;
+    }
+
+    const nextCategory = CATEGORY_LIST[targetIndex].key;
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    }
+    setCategory(nextCategory);
+  }, [setCategory]);
 
   /**
    * The pull-to-refresh badge is mounted only while a drag is genuinely in
@@ -170,11 +198,14 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
   useLayoutEffect(() => {
     panY.stopAnimation();
     panY.setValue(0);
+    panX.stopAnimation();
+    panX.setValue(0);
     isAnimatingRef.current = false;
     canReleaseRef.current = false;
     setIsPulling(false);
     setCanRelease(false);
-  }, [category, currentIndex, panY]);
+    gestureAxisRef.current = null;
+  }, [category, currentIndex, panY, panX]);
 
   // Capture container height dynamically
   const handleLayout = (e: LayoutChangeEvent) => {
@@ -252,6 +283,12 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
       } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
         e.preventDefault();
         goToPrevCard();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        handleSwitchCategory('next');
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        handleSwitchCategory('prev');
       }
     };
 
@@ -262,10 +299,10 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
       window.removeEventListener('wheel', handleWheel);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [goToNextCard, goToPrevCard]);
+  }, [goToNextCard, goToPrevCard, handleSwitchCategory]);
 
-  // Vertical-only card deck. The full story is reached through the arrow
-  // button on the card, so no horizontal axis is claimed here.
+  // Card deck gesture responder: vertical dragging scrolls stories;
+  // horizontal dragging (especially outside the card/margins) switches category topic.
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
@@ -273,28 +310,98 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
 
       onMoveShouldSetPanResponder: (_, gesture) => {
         if (isAnimatingRef.current) return false;
-        return (
-          Math.abs(gesture.dy) > 12 && Math.abs(gesture.dy) > Math.abs(gesture.dx) * 0.75
-        );
+
+        const absDx = Math.abs(gesture.dx);
+        const absDy = Math.abs(gesture.dy);
+        const screenWidth = windowDim.width;
+        // Check if gesture originated outside the card (e.g. within 45px of screen edges / gutters)
+        const isOutsideCard = gesture.x0 < 45 || gesture.x0 > screenWidth - 45;
+
+        // 1. Vertical card flick
+        if (absDy > 12 && absDy > absDx * 0.75) {
+          return true;
+        }
+
+        // 2. Horizontal topic flick outside card
+        if (isOutsideCard && absDx > 12 && absDx > absDy * 0.6) {
+          return true;
+        }
+
+        // 3. Clear horizontal topic flick anywhere
+        if (absDx > 25 && absDx > absDy * 1.35) {
+          return true;
+        }
+
+        return false;
       },
       onMoveShouldSetPanResponderCapture: () => false,
 
-      onPanResponderGrant: () => {
+      onPanResponderGrant: (_, gesture) => {
         panY.stopAnimation();
+        panX.stopAnimation();
         isAnimatingRef.current = false;
-        setIsPulling(true);
+        gestureStartXRef.current = gesture.x0;
+        gestureAxisRef.current = null;
+        setIsPulling(false);
       },
 
       onPanResponderMove: (_, gesture) => {
         if (isAnimatingRef.current) return;
-        setReleaseReady(gesture.dy > PULL_REFRESH_TRIGGER_PX);
-        panY.setValue(gesture.dy);
+
+        const absDx = Math.abs(gesture.dx);
+        const absDy = Math.abs(gesture.dy);
+        const screenWidth = windowDim.width;
+        const isOutsideCard = gestureStartXRef.current < 45 || gestureStartXRef.current > screenWidth - 45;
+
+        // Lock axis once user begins moving
+        if (!gestureAxisRef.current) {
+          if (isOutsideCard && absDx > 8) {
+            gestureAxisRef.current = 'horizontal';
+          } else if (absDy > 10 && absDy >= absDx * 0.75) {
+            gestureAxisRef.current = 'vertical';
+            setIsPulling(true);
+          } else if (absDx > 15 && absDx > absDy * 1.25) {
+            gestureAxisRef.current = 'horizontal';
+          }
+        }
+
+        if (gestureAxisRef.current === 'horizontal') {
+          panX.setValue(gesture.dx * 0.6);
+        } else if (gestureAxisRef.current === 'vertical') {
+          setReleaseReady(gesture.dy > PULL_REFRESH_TRIGGER_PX);
+          panY.setValue(gesture.dy);
+        }
       },
 
       onPanResponderRelease: (_, gesture) => {
         setIsPulling(false);
         setReleaseReady(false);
         if (isAnimatingRef.current) return;
+
+        const axis = gestureAxisRef.current;
+        gestureAxisRef.current = null;
+
+        if (axis === 'horizontal') {
+          const screenWidth = windowDim.width;
+          const isOutsideCard = gestureStartXRef.current < 45 || gestureStartXRef.current > screenWidth - 45;
+          const threshold = isOutsideCard ? 25 : 45;
+          const isLeftSwipe = gesture.dx < -threshold || gesture.vx < -0.28;
+          const isRightSwipe = gesture.dx > threshold || gesture.vx > 0.28;
+
+          Animated.spring(panX, {
+            toValue: 0,
+            friction: 7,
+            tension: 50,
+            useNativeDriver: Platform.OS !== 'web',
+          }).start();
+
+          if (isLeftSwipe) {
+            handleSwitchCategory('next');
+          } else if (isRightSwipe) {
+            handleSwitchCategory('prev');
+          }
+          return;
+        }
 
         const height = getCardHeight();
         const threshold = Math.min(height * 0.12, 80); // Distance threshold (80px max)
@@ -350,12 +457,21 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
         isAnimatingRef.current = false;
         setIsPulling(false);
         setReleaseReady(false);
-        Animated.spring(panY, {
-          toValue: 0,
-          friction: 7,
-          tension: 50,
-          useNativeDriver: Platform.OS !== 'web',
-        }).start();
+        gestureAxisRef.current = null;
+        Animated.parallel([
+          Animated.spring(panY, {
+            toValue: 0,
+            friction: 7,
+            tension: 50,
+            useNativeDriver: Platform.OS !== 'web',
+          }),
+          Animated.spring(panX, {
+            toValue: 0,
+            friction: 7,
+            tension: 50,
+            useNativeDriver: Platform.OS !== 'web',
+          }),
+        ]).start();
       },
     })
   ).current;
@@ -532,7 +648,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
           const isPrev = slotIndex === prevSlot;
 
           const layerTransform = isCurrent
-            ? [{ translateY: activeCardTranslateY }]
+            ? [{ translateY: activeCardTranslateY }, { translateX: panX }]
             : isNext
             ? [{ translateY: nextCardTranslateY }, { scale: nextCardScale }]
             : [{ translateY: prevCardTranslateY }, { scale: prevCardScale }];

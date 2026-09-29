@@ -239,7 +239,7 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
 const styles = StyleSheet.create({
   pageWrapper: {
     width: '100%',
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingTop: 4,
     paddingBottom: 6,
   },
