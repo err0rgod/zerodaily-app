@@ -2,7 +2,7 @@
   "expo": {
     "name": "ZeroDaily",
     "slug": "zerodaily",
-    "version": "0.3.9",
+    "version": "0.4.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "in.zerodaily.app",
-      "versionCode": 19,
+      "versionCode": 20,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",

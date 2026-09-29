@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "579068364193-rau09o9e1cqd43s1japsmv2lscr1cpb1.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "in.zerodaily.app",
+            "certificate_hash": "33161d83aab94b818091fc633938dc8273676262"
+          }
+        },
+        {
           "client_id": "579068364193-rq9rk25jr8kha1h2h52kc2nim92fipuh.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
