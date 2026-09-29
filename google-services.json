@@ -12,7 +12,20 @@
           "package_name": "in.zerodaily.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "579068364193-rq9rk25jr8kha1h2h52kc2nim92fipuh.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "in.zerodaily.app",
+            "certificate_hash": "3da049c5afe4321eca5e321111b73b51b857b418"
+          }
+        },
+        {
+          "client_id": "579068364193-ss0lik4umge8ij8djqc4p6eqagp18thl.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDRRO8C8mpknJoJmlcOAJtqDR6b44sQOpc"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "579068364193-ss0lik4umge8ij8djqc4p6eqagp18thl.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
