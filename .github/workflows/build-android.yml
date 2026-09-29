@@ -88,6 +88,8 @@ jobs:
 
       - name: Restore Persistent Signing Keystore
         run: |
+          mkdir -p ~/.android
+          cp credentials/zerodaily.keystore ~/.android/debug.keystore
           cp credentials/zerodaily.keystore android/app/debug.keystore
           echo "Restored persistent signing keystore with SHA-1 3D:A0:49:C5:AF:E4:32:1E:CA:5E:32:11:11:B7:3B:51:B8:57:B4:18"
 
@@ -126,6 +128,13 @@ jobs:
           echo "Found raw APK at: $RAW_APK"
           mkdir -p build_output
           cp "$RAW_APK" build_output/ZeroDaily.apk
+
+          # Explicitly re-sign with persistent keystore to guarantee exact certificate
+          APKSIGNER=$(find $ANDROID_SDK_ROOT/build-tools -name apksigner | sort -V | tail -n 1)
+          echo "Using apksigner at: $APKSIGNER"
+          $APKSIGNER sign --ks credentials/zerodaily.keystore --ks-pass pass:android --key-pass pass:android --ks-key-alias androiddebugkey build_output/ZeroDaily.apk
+          echo "Verified APK certificate fingerprints:"
+          $APKSIGNER verify --print-certs build_output/ZeroDaily.apk
 
           TAG_NAME="${{ steps.release_version.outputs.tag }}"
 
