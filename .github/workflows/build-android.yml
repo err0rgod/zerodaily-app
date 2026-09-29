@@ -42,31 +42,31 @@ jobs:
       EXPO_PUBLIC_API_URL: https://api.zerodaily.in
 
     steps:
-      - name: ⬇️ Checkout Repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: 🟢 Setup Node.js 22 (LTS)
+      - name: Setup Node.js 22 (LTS)
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: 'npm'
 
-      - name: ☕ Setup Java 17 (Temurin JDK)
+      - name: Setup Java 17 (Temurin JDK)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 📱 Accept Android SDK Licenses
+      - name: Accept Android SDK Licenses
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
 
-      - name: 📦 Install NPM Dependencies
+      - name: Install NPM Dependencies
         run: npm ci || npm install
 
-      - name: 🏷️ Determine Release Version Tag
+      - name: Determine Release Version Tag
         id: release_version
         run: |
           PKG_VERSION=$(node -p "require('./package.json').version")
@@ -83,10 +83,10 @@ jobs:
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "Determined release tag: $TAG"
 
-      - name: ⚙️ Expo Prebuild (Generate Native Android Project)
+      - name: Expo Prebuild (Generate Native Android Project)
         run: npx expo prebuild --platform android --clean --no-install
 
-      - name: 🐘 Cache Gradle Packages
+      - name: Cache Gradle Packages
         uses: actions/cache@v4
         with:
           path: |
@@ -96,21 +96,21 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: 🔨 Grant Execute Permission for Gradlew
+      - name: Grant Execute Permission for Gradlew
         working-directory: android
         run: chmod +x gradlew
 
-      - name: 🏗️ Assemble Standalone Release APK
+      - name: Assemble Standalone Release APK
         if: ${{ github.event.inputs.build_type == 'release' || github.event.inputs.build_type == '' }}
         working-directory: android
         run: ./gradlew assembleRelease -PkotlinVersion=1.9.25 --no-daemon --stacktrace
 
-      - name: 🏗️ Assemble Debug APK
+      - name: Assemble Debug APK
         if: ${{ github.event.inputs.build_type == 'debug' }}
         working-directory: android
         run: ./gradlew assembleDebug -PkotlinVersion=1.9.25 --no-daemon --stacktrace
 
-      - name: 📦 Prepare Direct APK File & Checksums
+      - name: Prepare Direct APK File & Checksums
         id: prepare_assets
         run: |
           RAW_APK=$(find android/app/build/outputs/apk -name "*.apk" | head -n 1)
@@ -140,7 +140,7 @@ jobs:
           cd ..
 
           # Output directly to GitHub Actions Step Summary
-          echo "## 📱 ZeroDaily Android APK Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## ZeroDaily Android APK Build Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
           echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
@@ -151,26 +151,26 @@ jobs:
           echo "| **Commit SHA** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Build Timestamp** | \`$(date -u)\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "> 🔐 **Direct SHA-256**: \`${APK_SHA256}\`" >> $GITHUB_STEP_SUMMARY
+          echo "> **Direct SHA-256**: \`${APK_SHA256}\`" >> $GITHUB_STEP_SUMMARY
 
-      - name: 🏷️ Publish GitHub Release
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release_version.outputs.tag }}
           name: "ZeroDaily Mobile Release ${{ steps.release_version.outputs.tag }}"
           body: |
-            ### 📱 ZeroDaily Mobile Release ${{ steps.release_version.outputs.tag }}
+            ### ZeroDaily Mobile Release ${{ steps.release_version.outputs.tag }}
             - **Standalone Release Build**: Full offline JS bundle embedded (no Metro dev server required).
             - **Backend API**: Configured directly to `https://api.zerodaily.in`.
             - **APK File Size**: `${{ steps.prepare_assets.outputs.apk_size }}`
             - **Commit SHA**: `${{ github.sha }}`
 
-            #### 🔐 Direct SHA-256 Checksum:
+            #### Direct SHA-256 Checksum:
             ```text
             ${{ steps.prepare_assets.outputs.sha256 }}  ZeroDaily.apk
             ```
 
-            #### 📦 Release Assets Included:
+            #### Release Assets Included:
             - [`ZeroDaily.apk`](https://github.com/err0rgod/zerodaily-app/releases/download/${{ steps.release_version.outputs.tag }}/ZeroDaily.apk) — Standalone Android Release APK (${{ steps.prepare_assets.outputs.apk_size }})
             - `ZeroDaily-SHA256.txt` — SHA256 Checksum and Git Commit verification
           files: |
@@ -181,7 +181,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 🚀 Upload APK Artifact
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ZeroDaily-Android-${{ github.event.inputs.build_type || 'release' }}-apk
