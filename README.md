@@ -1,175 +1,95 @@
-# ZeroDaily Mobile App (`zerodaily-app`)
+# ZeroDaily Mobile — Tech News, Roasted to Perfection
 
-[![CI](https://github.com/zerodaily/zerodaily-app/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
-[![Build Android](https://github.com/zerodaily/zerodaily-app/actions/workflows/build-android.yml/badge.svg)](.github/workflows/build-android.yml)
+[![CI](https://github.com/err0rgod/zerodaily-app/actions/workflows/ci.yml/badge.svg)](https://github.com/err0rgod/zerodaily-app/actions/workflows/ci.yml)
+[![Build Android](https://github.com/err0rgod/zerodaily-app/actions/workflows/build-android.yml/badge.svg)](https://github.com/err0rgod/zerodaily-app/actions/workflows/build-android.yml)
 [![Expo](https://img.shields.io/badge/Expo-52.0+-black.svg)](https://expo.dev)
 [![React Native](https://img.shields.io/badge/React%20Native-0.76-61DAFB.svg)](https://reactnative.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org)
 
-An **Inshorts-style vertical gesture news reader** for tech professionals, delivering 60-word roasted summaries across 6 tech domains.
+**ZeroDaily** is an Inshorts-style vertical gesture news reader built for engineers, hackers, and tech enthusiasts who want the signal without the noise.
 
-Built with **React Native / Expo** with full offline caching, 0ms cold-boot renders, background prefetching, client-side FCM topic subscriptions, and **100% Cloud-based CI/CD compilation** via GitHub Actions.
-
----
-
-## Architecture Overview
-
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                    Cloudflare CDN Edge                      │
-│        api.zerodaily.in       |     media.zerodaily.in      │
-└──────────────────────┬────────┴──────────────┬──────────────┘
-                       │                       │
-              JSON Feed & Articles        WebP 800px Assets
-                       │                       │
-                       ▼                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│                 ZeroDaily Mobile Client                     │
-│                                                             │
-│   ┌─────────────────────────────────────────────────────┐   │
-│   │            CardSwiper (Vertical Pager)              │   │
-│   │  • Full screen card snapping (60/120 FPS)           │   │
-│   │  • N-8 Prefetch Engine (fetches ahead at card 12)   │   │
-│   │  • WebP Image Pre-caching in disk memory            │   │
-│   └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│   ┌─────────────────────────────────────────────────────┐   │
-│   │           Local Storage Layer (Offline-First)       │   │
-│   │  • 0ms cold-boot render from local disk             │   │
-│   │  • Automatic background synchronization             │   │
-│   │  • Bookmarked stories offline storage               │   │
-│   └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│   ┌─────────────────────────────────────────────────────┐   │
-│   │             FCM Topic Push Architecture             │   │
-│   │  • Client-managed subscriptions (0 server tokens)   │   │
-│   │  • topic_breaking_all & topic_{category}            │   │
-│   │  • Deep link routing directly to breaking story     │   │
-│   └─────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-```
+No clickbait filler. No 30-minute podcast recaps. No sanitized corporate PR. Just the day's biggest breakthroughs, security meltdowns, and AI drama delivered in razor-sharp, **60-word roasted cards** with biting satirical wit.
 
 ---
 
-## Directory Layout
+## What Makes ZeroDaily Different?
+
+- **Swipe, Don't Scroll**: 60/120 FPS vertical paging engine with smooth tactile snap alignment. Swipe up to browse the next story; swipe down to revisit previous cards.
+- **60-Word Satirical Roasts**: Every card delivers a hilarious roasted headline and a witty 60-word summary that cuts straight to the point.
+- **The "Full Roast" Deep-Dive**: Want the full technical story? Tap "Full Roast" on any card to read a complete multi-paragraph breakdown with analytical commentary.
+- **Zero-Spinner Experience**: 0ms cold-boot renders directly from device storage. Predictive background prefetching loads images and stories ahead of your swipe so you never stare at a loading spinner.
+- **7 High-Octane Tech Channels**:
+  - 🔥 **Hot Stories**: The most impactful trending stories across the entire tech ecosystem.
+  - 🛡️ **Cybersecurity**: Critical zero-days, ransomware debacles, and security failures.
+  - 🤖 **Artificial Intelligence**: LLM benchmark wars, autonomous agents, and GPU clusters.
+  - 💻 **Software Engineering**: Runtimes, tooling wars, framework churn, and dev culture.
+  - 🦾 **Robotics**: Humanoids, automation breakthroughs, and robotic systems.
+  - 🚀 **Defense & Aerospace**: Hypersonics, satellite swarms, and aerospace engineering.
+  - ⚡ **Hardware & Chips**: TSMC wafer fabrication, GPUs, silicon architecture, and quantum computing.
+  - 📈 **Markets & Finance**: Tech earnings, venture capital deals, crypto volatility, and commodities.
+- **Adaptive Personalization**: The app quietly learns your favorite categories through natural dwell time and interaction without invasive third-party ad tracking.
+- **Frictionless Auth**: Start instantly as an anonymous guest, or sign in with one tap via **Google Sign-In** or **Firebase Email/Password**.
+- **Offline Library**: Bookmark stories with one tap. Access your saved library anytime, even with zero network connectivity.
+- **Light & Cyber-Dark Themes**: Switch seamlessly between a dark hacker terminal aesthetic and clean, modern daylight typography.
+
+---
+
+## Getting the App
+
+### Option A: Download Standalone Android APK
+Pre-compiled APKs signed with our cryptographic release keystore are automatically generated via GitHub Actions:
+
+1. Head over to the **[Releases](https://github.com/err0rgod/zerodaily-app/releases)** section.
+2. Download the latest `ZeroDaily.apk`.
+3. Install directly on your Android phone and start swiping.
+
+### Option B: Run Locally with Expo
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/err0rgod/zerodaily-app.git
+   cd zerodaily-app
+   ```
+
+2. **Install dependencies**:
+   ```bash
+   npm install
+   ```
+
+3. **Start the Expo development server**:
+   ```bash
+   npx expo start
+   ```
+
+4. Scan the QR code using the **Expo Go** app on your Android or iOS device.
+
+---
+
+## Project Structure
 
 ```text
 zerodaily-app/
-├── .github/
-│   └── workflows/
-│       ├── ci.yml                    # Automated TypeScript check and tests on push/PR
-│       └── build-android.yml         # Cloud runner compilation (outputs standalone APK)
-├── assets/                           # App icons, splash screens, notification monochrome icons
-├── scripts/
-│   └── generate_assets.py            # Automated asset synthesis script
-├── credentials/
-│   └── zerodaily.keystore        # Persistent signing keystore (SHA-1 cryptographic match with Firebase)
+├── credentials/              # Persistent release keystore (matches Firebase SHA-1)
 ├── src/
-│   ├── api/
-│   │   ├── client.ts                 # Resilient HTTP client with auth token, timeout & error handling
-│   │   └── endpoints.ts              # API routes matching D:/zerodaily/Docs.md
+│   ├── api/                  # Resilient API client & Firebase Auth Identity Toolkit integration
 │   ├── components/
-│   │   ├── common/
-│   │   │   ├── Badge.tsx             # Thematic glowing category badges
-│   │   │   ├── Header.tsx            # App bar with live terminal status dot & actions
-│   │   │   └── IconButton.tsx        # Tactile buttons with haptic feedback
-│   │   ├── feed/
-│   │   │   ├── CardSwiper.tsx        # Vertical paging engine with snap alignment
-│   │   │   ├── CategoryPills.tsx     # Horizontal category switcher with auto-scroll
-│   │   │   └── NewsCard.tsx          # 60-word headline card with WebP hero image
-│   │   ├── modals/
-│   │   │   ├── AuthModal.tsx         # Google Sign-In & Email/Password authentication
-│   │   │   ├── BookmarksModal.tsx    # Saved offline stories manager with cloud sync
-│   │   │   ├── FullRoastModal.tsx    # Slide-up modal with complete analytical roast
-│   │   │   ├── NotificationModal.tsx # Breaking push alerts history inbox
-│   │   │   └── SettingsModal.tsx     # FCM topic toggles, account profile & deletion
-│   │   └── webview/
-│   │       └── ArticleReader.ts      # Native Chrome Custom Tabs / Safari reader
-│   ├── constants/
-│   │   ├── categories.ts             # Category taxonomy & FCM topic mappings
-│   │   └── theme.ts                  # Dark cyber-hacker design tokens
-│   ├── hooks/
-│   │   └── useNotifications.ts       # Android notification channel & deep linking
-│   ├── store/
-│   │   ├── bookmarkStore.ts          # Offline saved stories store with cloud sync
-│   │   ├── feedStore.ts              # Feed state, 0ms cache, cursor pagination & N-8 rule
-│   │   ├── settingsStore.ts          # User notification preferences
-│   │   └── userStore.ts              # User profile, JWT session, telemetry & Google auth
-│   ├── types/
-│   │   └── index.ts                  # Strict TypeScript interfaces
-│   └── utils/
-│       ├── date.ts                   # Relative time formatter ("18m ago")
-│       └── share.ts                  # Native share sheet helper
-├── App.tsx                           # Main application coordinator
-├── app.json                          # Expo configuration manifest
-├── eas.json                          # EAS Cloud Build configuration
-├── google-services.json              # Firebase & Google OAuth credentials
-├── index.ts                          # Expo entry point
-├── notification-arch.md              # Client push notification contract
-└── package.json                      # Dependencies and scripts
+│   │   ├── common/           # Header, glowing badges, tactile buttons
+│   │   ├── feed/             # CardSwiper vertical pager & 60-word NewsCard
+│   │   └── modals/           # AuthModal, FullRoastModal, BookmarksModal, SettingsModal
+│   ├── constants/            # Category taxonomy, theme tokens, and topic mappings
+│   ├── hooks/                # Push notifications & deep linking handlers
+│   ├── store/                # Zustand stores (feedStore, userStore, bookmarkStore, themeStore)
+│   └── types/                # Strict TypeScript contracts
+├── App.tsx                   # Main application coordinator
+├── app.json                  # Expo manifest configuration
+├── google-services.json      # Firebase & Google OAuth credentials
+└── package.json              # Project scripts and dependencies
 ```
 
 ---
 
-## Cloud CI/CD Build Pipeline (Zero Laptop Compiling Load)
+## Backend Infrastructure
 
-To prevent your laptop from running heavy Android SDK / Gradle compilations, **all APK builds execute in GitHub Actions in the cloud**:
-
-### How It Works:
-1. Release Tag Trigger (Builds production APK):
-   ```bash
-   git tag v0.4.3
-   git push origin v0.4.3
-   ```
-2. The GitHub Actions runner checks out the repository, installs dependencies, binds `credentials/zerodaily.keystore`, compiles the Android app, and cryptographically signs the final APK with `apksigner`.
-3. Download `ZeroDaily.apk` directly from GitHub Actions summary or Releases page.
-3. Click **Run workflow**, choose `debug` or `release`, and run.
-4. The Ubuntu cloud runner will:
-   - Setup Java 17 and Android SDK.
-   - Run `npx expo prebuild`.
-   - Compile `./gradlew assembleDebug` (or `assembleRelease`).
-   - Produce a standalone `.apk` and upload it directly as an artifact!
-5. **Download the APK directly to your phone from GitHub Actions.**
-
----
-
-## Local Development (Lightweight Web / Preview)
-
-Run the lightweight dev server without building any native binaries:
-
-### 1. Start Expo Web
-```bash
-npm run web
-```
-Opens in your browser instantly at `http://localhost:8081` with live reloading.
-
-### 2. Test in Expo Go (Mobile Phone)
-```bash
-npx expo start
-```
-Scan the QR code using the **Expo Go** app on Android or iOS.
-
----
-
-## Supported Tech Categories & FCM Topics
-
-| Category | Key | Color | FCM Topic String | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| **Top Feed** | `all` | Emerald (`#10B981`) | `topic_breaking_all` | Unified feed across all 7 domains. |
-| **Cybersecurity** | `cybersec` | Red (`#EF4444`) | `topic_cybersec` | Zero-days, CVEs, breach alerts. |
-| **Artificial Intelligence** | `ai` | Violet (`#A855F7`) | `topic_ai` | Frontier LLMs, benchmark disruptions. |
-| **Software Engineering** | `programming` | Emerald (`#10B981`) | `topic_programming` | Runtimes, kernel bugs, developer culture. |
-| **Robotics** | `robotics` | Amber (`#F59E0B`) | `topic_robotics` | Humanoid milestones, automation. |
-| **Defense & Aerospace** | `defense_aerospace` | Cyan (`#06B6D4`) | `topic_defense_aerospace` | Orbital tests, hypersonics, defense tech. |
-| **Hardware & Silicon** | `hardware` | Copper (`#F97316`) | `topic_hardware` | Transistor tape-outs, GPUs, packaging. |
-| **Finance** | `finance` | Teal (`#14B8A6`) | `topic_finance` | Fintech, algorithmic trading, crypto, venture capital. |
-
----
-
-## Inshorts Swiper Algorithm & Optimization
-
-Conforming to [D:/zerodaily/Docs.md](file:///D:/zerodaily/Docs.md#L340-L358):
-1. **0ms Cold Boot**: Feed immediately loads from local disk cache (`AsyncStorage`). No spinners or blank screens on launch.
-2. **Background Sync**: Silently queries `GET /api/v1/feed` and updates cache if new articles exist.
-3. **N - 8 Prefetch Rule**: When the user scrolls to card `N - 8` (e.g. Card 12 in a 20-card batch), the app automatically triggers the next cursor fetch (`next_cursor`) and pre-downloads the next batch of WebP hero images.
-4. **Hardware-Accelerated WebP Decoding**: Images are handled via `expo-image` with disk caching and fast decoding.
+ZeroDaily Mobile is powered by the serverless backend infrastructure hosted at `api.zerodaily.in`:
+- **Repository**: [zerodaily](https://github.com/err0rgod/zerodaily)
+- **API Documentation**: [Docs](https://github.com/err0rgod/zerodaily/blob/main/Docs.md)
