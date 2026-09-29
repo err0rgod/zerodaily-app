@@ -62,9 +62,11 @@ zerodaily-app/
 ├── assets/                           # App icons, splash screens, notification monochrome icons
 ├── scripts/
 │   └── generate_assets.py            # Automated asset synthesis script
+├── credentials/
+│   └── zerodaily.keystore        # Persistent signing keystore (SHA-1 cryptographic match with Firebase)
 ├── src/
 │   ├── api/
-│   │   ├── client.ts                 # Resilient HTTP client with timeout & error handling
+│   │   ├── client.ts                 # Resilient HTTP client with auth token, timeout & error handling
 │   │   └── endpoints.ts              # API routes matching D:/zerodaily/Docs.md
 │   ├── components/
 │   │   ├── common/
@@ -73,13 +75,14 @@ zerodaily-app/
 │   │   │   └── IconButton.tsx        # Tactile buttons with haptic feedback
 │   │   ├── feed/
 │   │   │   ├── CardSwiper.tsx        # Vertical paging engine with snap alignment
-│   │   │   ├── CategoryPills.tsx     # Horizontal category switcher
+│   │   │   ├── CategoryPills.tsx     # Horizontal category switcher with auto-scroll
 │   │   │   └── NewsCard.tsx          # 60-word headline card with WebP hero image
 │   │   ├── modals/
-│   │   │   ├── BookmarksModal.tsx    # Saved offline stories manager
+│   │   │   ├── AuthModal.tsx         # Google Sign-In & Email/Password authentication
+│   │   │   ├── BookmarksModal.tsx    # Saved offline stories manager with cloud sync
 │   │   │   ├── FullRoastModal.tsx    # Slide-up modal with complete analytical roast
 │   │   │   ├── NotificationModal.tsx # Breaking push alerts history inbox
-│   │   │   └── SettingsModal.tsx     # FCM topic subscription toggles
+│   │   │   └── SettingsModal.tsx     # FCM topic toggles, account profile & deletion
 │   │   └── webview/
 │   │       └── ArticleReader.ts      # Native Chrome Custom Tabs / Safari reader
 │   ├── constants/
@@ -88,9 +91,10 @@ zerodaily-app/
 │   ├── hooks/
 │   │   └── useNotifications.ts       # Android notification channel & deep linking
 │   ├── store/
-│   │   ├── bookmarkStore.ts          # Offline saved stories store
+│   │   ├── bookmarkStore.ts          # Offline saved stories store with cloud sync
 │   │   ├── feedStore.ts              # Feed state, 0ms cache, cursor pagination & N-8 rule
-│   │   └── settingsStore.ts          # User notification preferences
+│   │   ├── settingsStore.ts          # User notification preferences
+│   │   └── userStore.ts              # User profile, JWT session, telemetry & Google auth
 │   ├── types/
 │   │   └── index.ts                  # Strict TypeScript interfaces
 │   └── utils/
@@ -99,6 +103,7 @@ zerodaily-app/
 ├── App.tsx                           # Main application coordinator
 ├── app.json                          # Expo configuration manifest
 ├── eas.json                          # EAS Cloud Build configuration
+├── google-services.json              # Firebase & Google OAuth credentials
 ├── index.ts                          # Expo entry point
 ├── notification-arch.md              # Client push notification contract
 └── package.json                      # Dependencies and scripts
@@ -111,13 +116,13 @@ zerodaily-app/
 To prevent your laptop from running heavy Android SDK / Gradle compilations, **all APK builds execute in GitHub Actions in the cloud**:
 
 ### How It Works:
-1. Push your code to GitHub:
+1. Release Tag Trigger (Builds production APK):
    ```bash
-   git add .
-   git commit -m "feat: inshorts feed engine"
-   git push origin main
+   git tag v0.4.3
+   git push origin v0.4.3
    ```
-2. Open your repository on GitHub and click **Actions** → **Build Android APK (Cloud CI)**.
+2. The GitHub Actions runner checks out the repository, installs dependencies, binds `credentials/zerodaily.keystore`, compiles the Android app, and cryptographically signs the final APK with `apksigner`.
+3. Download `ZeroDaily.apk` directly from GitHub Actions summary or Releases page.
 3. Click **Run workflow**, choose `debug` or `release`, and run.
 4. The Ubuntu cloud runner will:
    - Setup Java 17 and Android SDK.

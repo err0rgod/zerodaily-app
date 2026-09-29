@@ -7,14 +7,12 @@ import {
 } from '@react-native-google-signin/google-signin';
 import {
   AlertCircle,
-  Bookmark,
   Check,
   Eye,
   EyeOff,
   Flame,
   Lock,
   Mail,
-  Sparkles,
   User,
   X,
 } from 'lucide-react-native';
@@ -263,7 +261,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <View style={styles.titleRow}>
               <Flame size={20} color={colors.primary} />
               <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-                {mode === 'signup' ? 'Create ZeroDaily Account' : 'Welcome Back'}
+                {mode === 'signup' ? 'Create Account' : 'Sign In'}
               </Text>
             </View>
             <TouchableOpacity
@@ -333,27 +331,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   Sign In
                 </Text>
               </TouchableOpacity>
-            </View>
-
-            {/* Value Proposition Highlights */}
-            <View
-              style={[
-                styles.valueBox,
-                { backgroundColor: colors.surface, borderColor: colors.border },
-              ]}
-            >
-              <View style={styles.valueRow}>
-                <Sparkles size={16} color={colors.primary} />
-                <Text style={[styles.valueText, { color: colors.textSecondary }]}>
-                  Adaptive roast algorithm tuned to your reading habits
-                </Text>
-              </View>
-              <View style={styles.valueRow}>
-                <Bookmark size={16} color={colors.primary} />
-                <Text style={[styles.valueText, { color: colors.textSecondary }]}>
-                  Bookmarks & saved roasts synced across all your devices
-                </Text>
-              </View>
             </View>
 
             {/* Error Message Alert */}
@@ -572,7 +549,7 @@ const styles = StyleSheet.create({
     padding: 4,
     borderRadius: 14,
     borderWidth: 1,
-    marginBottom: 16,
+    marginBottom: 20,
     gap: 6,
   },
   tabButton: {
@@ -586,23 +563,6 @@ const styles = StyleSheet.create({
   },
   tabButtonText: {
     fontSize: 14,
-  },
-  valueBox: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 14,
-    marginBottom: 20,
-    gap: 10,
-  },
-  valueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  valueText: {
-    flex: 1,
-    fontSize: 12.5,
-    lineHeight: 18,
   },
   errorBanner: {
     flexDirection: 'row',

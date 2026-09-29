@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
-import { Bell, Check, Sparkles } from 'lucide-react-native';
+import { Check } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -25,15 +25,19 @@ export const ONBOARDING_COMPLETED_KEY = '@zerodaily_onboarding_completed';
 const NOTIFICATION_CATEGORIES = CATEGORY_LIST.filter((c) => c.key !== 'all');
 
 interface CategoryOnboardingModalProps {
+  visible?: boolean;
   onComplete?: () => void;
 }
 
-export const CategoryOnboardingModal: React.FC<CategoryOnboardingModalProps> = ({ onComplete }) => {
+export const CategoryOnboardingModal: React.FC<CategoryOnboardingModalProps> = ({
+  visible: propVisible,
+  onComplete,
+}) => {
   const { colors, isDark } = useTheme();
   const setInitialCategories = useSettingsStore((s) => s.setInitialCategories);
 
-  const [visible, setVisible] = useState<boolean>(false);
-  const [isCheckingStatus, setIsCheckingStatus] = useState<boolean>(true);
+  const [internalVisible, setInternalVisible] = useState<boolean>(false);
+  const [isCheckingStatus, setIsCheckingStatus] = useState<boolean>(propVisible === undefined);
   const [selectedCategories, setSelectedCategories] = useState<CategoryKey[]>([
     'cybersec',
     'ai',
@@ -42,12 +46,16 @@ export const CategoryOnboardingModal: React.FC<CategoryOnboardingModalProps> = (
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   useEffect(() => {
+    if (propVisible !== undefined) {
+      setIsCheckingStatus(false);
+      return;
+    }
     async function checkFirstLaunch() {
       try {
         const completed = await AsyncStorage.getItem(ONBOARDING_COMPLETED_KEY);
         if (completed !== 'true') {
           // First launch: present modal to user
-          setVisible(true);
+          setInternalVisible(true);
         }
       } catch (err) {
         console.warn('[CategoryOnboardingModal] Failed to read onboarding status:', err);
@@ -57,7 +65,9 @@ export const CategoryOnboardingModal: React.FC<CategoryOnboardingModalProps> = (
     }
 
     checkFirstLaunch();
-  }, []);
+  }, [propVisible]);
+
+  const isModalVisible = propVisible !== undefined ? propVisible : internalVisible;
 
   const handleToggleCategory = (categoryKey: CategoryKey) => {
     if (Platform.OS !== 'web') {
@@ -71,17 +81,6 @@ export const CategoryOnboardingModal: React.FC<CategoryOnboardingModalProps> = (
         return [...prev, categoryKey];
       }
     });
-  };
-
-  const handleSelectAll = () => {
-    if (Platform.OS !== 'web') {
-      Haptics.selectionAsync().catch(() => {});
-    }
-    if (selectedCategories.length === NOTIFICATION_CATEGORIES.length) {
-      setSelectedCategories([]);
-    } else {
-      setSelectedCategories(NOTIFICATION_CATEGORIES.map((c) => c.key));
-    }
   };
 
   const handleConfirm = async () => {
@@ -105,28 +104,26 @@ export const CategoryOnboardingModal: React.FC<CategoryOnboardingModalProps> = (
       await AsyncStorage.setItem(ONBOARDING_COMPLETED_KEY, 'true');
 
       // 4. Dismiss modal
-      setVisible(false);
+      setInternalVisible(false);
       onComplete?.();
     } catch (err) {
       console.error('[CategoryOnboardingModal] Error completing onboarding:', err);
       // Even if network fails, don't trap the user forever
       await AsyncStorage.setItem(ONBOARDING_COMPLETED_KEY, 'true').catch(() => {});
-      setVisible(false);
+      setInternalVisible(false);
       onComplete?.();
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  if (isCheckingStatus || !visible) {
+  if (isCheckingStatus || !isModalVisible) {
     return null;
   }
 
-  const allSelected = selectedCategories.length === NOTIFICATION_CATEGORIES.length;
-
   return (
     <Modal
-      visible={visible}
+      visible={isModalVisible}
       animationType="fade"
       transparent={false}
       statusBarTranslucent
@@ -136,35 +133,11 @@ export const CategoryOnboardingModal: React.FC<CategoryOnboardingModalProps> = (
     >
       <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
         <View style={styles.container}>
-          {/* Header Section */}
+          {/* Minimal Header */}
           <View style={styles.header}>
-            <View style={[styles.badge, { backgroundColor: `${colors.primary}18`, borderColor: `${colors.primary}40` }]}>
-              <Sparkles size={14} color={colors.primary} />
-              <Text style={[styles.badgeText, { color: colors.primary }]}>PERSONALIZED INTEL</Text>
-            </View>
-
             <Text style={[styles.title, { color: colors.textPrimary }]}>
-              Choose Your Channels
+              Select your interests
             </Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              Select the tech domains you want instant breaking news alerts for. You can change these anytime in Settings.
-            </Text>
-          </View>
-
-          {/* Quick Select Bar */}
-          <View style={styles.quickBar}>
-            <Text style={[styles.countLabel, { color: colors.textMuted }]}>
-              {selectedCategories.length} of {NOTIFICATION_CATEGORIES.length} selected
-            </Text>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={handleSelectAll}
-              style={[styles.selectAllBtn, { borderColor: colors.border }]}
-            >
-              <Text style={[styles.selectAllText, { color: colors.primary }]}>
-                {allSelected ? 'Clear All' : 'Select All'}
-              </Text>
-            </TouchableOpacity>
           </View>
 
           {/* Category Grid Boxes */}
@@ -240,13 +213,6 @@ export const CategoryOnboardingModal: React.FC<CategoryOnboardingModalProps> = (
 
           {/* Bottom Action Footer */}
           <View style={[styles.footer, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
-            <View style={styles.guaranteeRow}>
-              <Bell size={13} color={colors.textMuted} />
-              <Text style={[styles.guaranteeText, { color: colors.textMuted }]}>
-                Includes global breaking alerts • Zero spam
-              </Text>
-            </View>
-
             <TouchableOpacity
               activeOpacity={0.85}
               onPress={handleConfirm}
@@ -283,55 +249,13 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-    marginBottom: 12,
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.8,
+    paddingTop: 24,
+    paddingBottom: 16,
   },
   title: {
     fontSize: 26,
     fontWeight: '800',
     letterSpacing: -0.5,
-    marginBottom: 6,
-  },
-  subtitle: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  quickBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-  },
-  countLabel: {
-    fontSize: 12.5,
-    fontWeight: '500',
-  },
-  selectAllBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  selectAllText: {
-    fontSize: 12,
-    fontWeight: '700',
   },
   scrollView: {
     flex: 1,
@@ -383,19 +307,9 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: Platform.OS === 'ios' ? 8 : 16,
+    paddingTop: 16,
+    paddingBottom: Platform.OS === 'ios' ? 16 : 20,
     borderTopWidth: 1,
-  },
-  guaranteeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginBottom: 10,
-  },
-  guaranteeText: {
-    fontSize: 11.5,
   },
   continueBtn: {
     height: 50,

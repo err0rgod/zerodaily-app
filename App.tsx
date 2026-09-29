@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
@@ -9,7 +10,10 @@ import { ErrorBoundary } from './src/components/common/ErrorBoundary';
 import { CardSwiper } from './src/components/feed/CardSwiper';
 import { CategoryPills } from './src/components/feed/CategoryPills';
 import { BookmarksModal } from './src/components/modals/BookmarksModal';
-import { CategoryOnboardingModal } from './src/components/modals/CategoryOnboardingModal';
+import {
+  CategoryOnboardingModal,
+  ONBOARDING_COMPLETED_KEY,
+} from './src/components/modals/CategoryOnboardingModal';
 import { FullRoastModal } from './src/components/modals/FullRoastModal';
 import { ImageViewerModal } from './src/components/modals/ImageViewerModal';
 import { SettingsModal } from './src/components/modals/SettingsModal';
@@ -49,6 +53,10 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isBookmarksOpen, setIsBookmarksOpen] = useState<boolean>(false);
 
+  // First-Launch Onboarding Sequence: Prompt Signup/Login -> Prompt Channels
+  const [isOnboardingAuthOpen, setIsOnboardingAuthOpen] = useState<boolean>(false);
+  const [isOnboardingChannelsOpen, setIsOnboardingChannelsOpen] = useState<boolean>(false);
+
   const handleArticleSelectedFromNotification = React.useCallback(() => {
     setIsSettingsOpen(false);
     setIsBookmarksOpen(false);
@@ -67,6 +75,27 @@ export default function App() {
     loadBookmarks();
     useUserStore.getState().initSession();
 
+    // Check first-launch onboarding status
+    async function checkOnboarding() {
+      try {
+        const completed = await AsyncStorage.getItem(ONBOARDING_COMPLETED_KEY);
+        if (completed !== 'true') {
+          const token = await AsyncStorage.getItem('@zerodaily_auth_token');
+          if (!token) {
+            // First prompt user to signup or login
+            setIsOnboardingAuthOpen(true);
+          } else {
+            // Already authenticated, go straight to channels
+            setIsOnboardingChannelsOpen(true);
+          }
+        }
+      } catch (err) {
+        console.warn('[App] Failed to check onboarding status:', err);
+      }
+    }
+
+    checkOnboarding();
+
     // Prevent Cold-Boot Race Condition:
     // If opening from a tapped notification, ensure the tapped story stays pinned
     // at the front and isn't overwritten by a competing loadInitialFeed().
@@ -80,6 +109,18 @@ export default function App() {
         useFeedStore.getState().loadInitialFeed();
       });
   }, [initTheme, loadBookmarks]);
+
+  const handleAuthModalClose = React.useCallback(() => {
+    if (isOnboardingAuthOpen) {
+      setIsOnboardingAuthOpen(false);
+      setIsOnboardingChannelsOpen(true);
+    }
+    closeAuthModal();
+  }, [isOnboardingAuthOpen, closeAuthModal]);
+
+  const handleOnboardingChannelsComplete = React.useCallback(() => {
+    setIsOnboardingChannelsOpen(false);
+  }, []);
 
   const handleOpenFullRoast = React.useCallback((article: Article) => {
     setSelectedRoastArticle(article);
@@ -179,13 +220,16 @@ export default function App() {
 
             {/* Authentication & Profile Creation Modal */}
             <AuthModal
-              visible={isAuthModalOpen}
-              initialMode={authModalMode}
-              onClose={closeAuthModal}
+              visible={isAuthModalOpen || isOnboardingAuthOpen}
+              initialMode={isOnboardingAuthOpen ? 'signup' : authModalMode}
+              onClose={handleAuthModalClose}
             />
 
             {/* First-launch Category Subscription Onboarding (Prompted once after install) */}
-            <CategoryOnboardingModal />
+            <CategoryOnboardingModal
+              visible={isOnboardingChannelsOpen}
+              onComplete={handleOnboardingChannelsComplete}
+            />
           </SafeAreaView>
         </SafeAreaProvider>
       </GestureHandlerRootView>

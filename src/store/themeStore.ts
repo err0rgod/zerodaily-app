@@ -24,13 +24,13 @@ function resolveIsDark(mode: ThemeMode): boolean {
   if (mode === 'light') return false;
   // 'system'
   const sys = Appearance.getColorScheme();
-  return sys !== 'light'; // Default to dark if system is null or dark
+  return sys === 'dark'; // Default to light if system is null or light
 }
 
 export const useThemeStore = create<ThemeState>((set, get) => ({
-  themeMode: 'dark',
-  isDark: true,
-  theme: DARK_THEME,
+  themeMode: 'light',
+  isDark: false,
+  theme: LIGHT_THEME,
   isInitialized: false,
 
   initTheme: async () => {
@@ -51,9 +51,9 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
     }
 
     set({
-      themeMode: 'dark',
-      isDark: true,
-      theme: DARK_THEME,
+      themeMode: 'light',
+      isDark: false,
+      theme: LIGHT_THEME,
       isInitialized: true,
     });
   },

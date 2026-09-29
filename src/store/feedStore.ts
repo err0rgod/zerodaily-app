@@ -118,12 +118,27 @@ function mergeWithNotification(articles: Article[], notifArticle: Article | null
 }
 
 /**
- * Applies user algorithmic affinity weights and topic preferences, then merges notification article.
+ * Fisher-Yates array shuffle.
+ */
+export function shuffleArray<T>(items: T[]): T[] {
+  const result = [...items];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const temp = result[i];
+    result[i] = result[j];
+    result[j] = temp;
+  }
+  return result;
+}
+
+/**
+ * Applies user algorithmic affinity weights and topic preferences, shuffles, then merges notification article.
  */
 function personalizeAndMerge(articles: Article[], notifArticle: Article | null, currentCategory: CategoryKey): Article[] {
   const user = useUserStore.getState().user;
   const personalized = rankArticlesForUser(articles, user, currentCategory);
-  return mergeWithNotification(personalized, notifArticle, currentCategory);
+  const shuffled = shuffleArray(personalized);
+  return mergeWithNotification(shuffled, notifArticle, currentCategory);
 }
 
 export const useFeedStore = create<FeedState>((set, get) => ({
@@ -307,8 +322,9 @@ export const useFeedStore = create<FeedState>((set, get) => ({
         const fresh = res.data.filter((a) => !existingIds.has(a.id));
         const user = useUserStore.getState().user;
         const personalizedFresh = rankArticlesForUser(fresh, user, category);
+        const shuffledFresh = shuffleArray(personalizedFresh);
 
-        const updated = [...articles, ...personalizedFresh];
+        const updated = [...articles, ...shuffledFresh];
         set({
           articles: updated,
           cursor: res.pagination.next_cursor,

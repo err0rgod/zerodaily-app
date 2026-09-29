@@ -5,7 +5,7 @@
     "version": "0.4.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "scheme": "zerodaily",
     "splash": {
       "image": "./assets/splash-icon.png",

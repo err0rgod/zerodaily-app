@@ -1,5 +1,5 @@
 import { ENDPOINTS } from '../src/api/endpoints';
-import { CACHE_TTL_MS, useFeedStore } from '../src/store/feedStore';
+import { CACHE_TTL_MS, shuffleArray, useFeedStore } from '../src/store/feedStore';
 import { Article } from '../src/types';
 
 // Mock AsyncStorage
@@ -125,13 +125,21 @@ describe('FeedStore 30-Minute Cache TTL & Chronological Consistency', () => {
     expect(state.articles.length).toBeGreaterThan(1);
   });
 
-  test('refreshFeed maintains strict chronological order without random shuffling', async () => {
+  test('refreshFeed returns all articles shuffled', async () => {
     await useFeedStore.getState().refreshFeed();
 
     const state = useFeedStore.getState();
     expect(state.articles.length).toBe(2);
-    expect(state.articles[0].id).toBe(mockApiArticles[0].id);
-    expect(state.articles[1].id).toBe(mockApiArticles[1].id);
+    expect(state.articles.map((a) => a.id)).toEqual(
+      expect.arrayContaining([mockApiArticles[0].id, mockApiArticles[1].id])
+    );
+  });
+
+  test('shuffleArray permutes elements without losing items', () => {
+    const arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    const shuffled = shuffleArray(arr);
+    expect(shuffled.length).toBe(arr.length);
+    expect([...shuffled].sort((a, b) => a - b)).toEqual(arr);
   });
 
   test('refreshFeed fetches the next 20 articles using cursor when available', async () => {
@@ -172,7 +180,9 @@ describe('FeedStore 30-Minute Cache TTL & Chronological Consistency', () => {
     // Should NOT have the stale story, should have fresh articles from API
     expect(state.articles.find((a) => a.id === 'https://example.com/stale-story')).toBeUndefined();
     expect(state.articles.length).toBe(2);
-    expect(state.articles[0].id).toBe(mockApiArticles[0].id);
+    expect(state.articles.map((a) => a.id)).toEqual(
+      expect.arrayContaining([mockApiArticles[0].id, mockApiArticles[1].id])
+    );
   });
 
   test('restores from disk cache immediately if fresh (< 15 minutes old)', async () => {
