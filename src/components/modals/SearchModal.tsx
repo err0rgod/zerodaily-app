@@ -179,6 +179,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({ visible, onClose }) =>
             renderItem={renderItem}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
+            nestedScrollEnabled={true}
             keyboardShouldPersistTaps="handled"
             ListEmptyComponent={
               <View style={styles.emptyContainer}>

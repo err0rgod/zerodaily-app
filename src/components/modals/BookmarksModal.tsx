@@ -164,6 +164,8 @@ export const BookmarksModal: React.FC<BookmarksModalProps> = ({ visible, onClose
             ListHeaderComponent={renderGuestBanner}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
+            nestedScrollEnabled={true}
+            keyboardShouldPersistTaps="handled"
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
                 <Bookmark size={40} color={colors.border} style={{ marginBottom: 12 }} />

@@ -172,6 +172,8 @@ export const CategoryOnboardingModal: React.FC<CategoryOnboardingModalProps> = (
             style={styles.scrollView}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
+            nestedScrollEnabled={true}
+            keyboardShouldPersistTaps="handled"
           >
             <View style={styles.gridContainer}>
               {NOTIFICATION_CATEGORIES.map((cat) => {

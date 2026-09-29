@@ -369,6 +369,8 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
               renderItem={renderItem}
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
+              nestedScrollEnabled={true}
+              keyboardShouldPersistTaps="handled"
               refreshControl={
                 <RefreshControl
                   refreshing={isRefreshing}

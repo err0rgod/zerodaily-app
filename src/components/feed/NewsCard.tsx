@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Bookmark, ChevronRight, ExternalLink, Globe, Share2 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Platform, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
-import { CATEGORIES, DEFAULT_FALLBACK_IMAGE, getDynamicFallbackImage } from '../../constants/categories';
+import { getDynamicFallbackImage } from '../../constants/categories';
 import { useBookmarkStore } from '../../store/bookmarkStore';
 import { useTheme } from '../../store/themeStore';
 import { useUserStore } from '../../store/userStore';
@@ -38,14 +38,9 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
   const isCompactScreen = cardHeight < 620;
 
   // Dynamically balance typography limits so large fonts never crowd out footer
-  const headingLines = isLargeFont || isCompactScreen ? 2 : 3;
   const summaryLines = isLargeFont ? 5 : (isCompactScreen ? 6 : 7);
 
-  const categoryMeta = CATEGORIES[article.category] || CATEGORIES.all;
   const dynamicFallback = getDynamicFallbackImage(article.id, article.category);
-  const categoryAccent = article.category === 'all'
-    ? colors.primary
-    : (colors[article.category] || categoryMeta.accentColor);
 
   const isValidUrl = Boolean(article.image_url && article.image_url.trim().length > 0);
   const [hasLoadError, setHasLoadError] = useState<boolean>(false);

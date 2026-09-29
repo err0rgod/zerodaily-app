@@ -137,6 +137,8 @@ export const FullRoastModal: React.FC<FullRoastModalProps> = ({
             style={styles.scrollArea}
             contentContainerStyle={styles.contentContainer}
             showsVerticalScrollIndicator={false}
+            nestedScrollEnabled={true}
+            keyboardShouldPersistTaps="handled"
           >
             {/* Hero Image */}
             <View

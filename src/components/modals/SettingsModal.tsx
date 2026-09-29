@@ -1,15 +1,9 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import {
   AlertCircle,
-  Bell,
-  Check,
-  Copy,
   LogIn,
   LogOut,
   Moon,
-  RefreshCw,
   Settings,
   ShieldCheck,
   Smartphone,
@@ -17,11 +11,9 @@ import {
   Trash2,
   User,
   X,
-  Zap,
 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Modal,
   Platform,
@@ -34,10 +26,6 @@ import {
   View,
 } from 'react-native';
 import { CATEGORY_LIST } from '../../constants/categories';
-import {
-  registerForPushNotificationsAsync,
-  scheduleTestBreakingAlert,
-} from '../../services/notificationService';
 import { useSettingsStore } from '../../store/settingsStore';
 import { ThemeMode, useTheme } from '../../store/themeStore';
 import { useUserStore } from '../../store/userStore';
@@ -47,16 +35,20 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-let cachedFcmToken: string | null = null;
-
 export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }) => {
-  const { preferences, toggleCategoryNotification, toggleBreakingAll } = useSettingsStore();
+  const { preferences, toggleCategoryNotification } = useSettingsStore();
   const { colors, themeMode, setThemeMode, isDark } = useTheme();
-  const { user, isAuthenticated, isGuest, isLoading, signOut, deleteAccount, openAuthModal } = useUserStore();
-  const [isSendingTest, setIsSendingTest] = useState<boolean>(false);
-  const [fcmToken, setFcmToken] = useState<string | null>(cachedFcmToken);
-  const [isCheckingFcm, setIsCheckingFcm] = useState<boolean>(false);
-  const [hasCopiedToken, setHasCopiedToken] = useState<boolean>(false);
+  const { user, isAuthenticated, isLoading, signOut, deleteAccount, openAuthModal } = useUserStore();
+  const [scrollKey, setScrollKey] = useState<number>(0);
+
+  useEffect(() => {
+    if (visible) {
+      const timer = setTimeout(() => {
+        setScrollKey((k) => k + 1);
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [visible]);
 
   const handleSignOut = () => {
     Alert.alert(
@@ -106,117 +98,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
     );
   };
 
-  useEffect(() => {
-    if (visible && !fcmToken) {
-      registerForPushNotificationsAsync().then((t) => {
-        if (t) {
-          cachedFcmToken = t;
-          setFcmToken(t);
-        }
-      }).catch(() => {});
-    }
-  }, [visible, fcmToken]);
-
-  const handleCopyFcmToken = async () => {
-    if (!fcmToken) {
-      await handleCheckFcmDiagnostics();
-      return;
-    }
-
-    await Clipboard.setStringAsync(fcmToken);
-    if (Platform.OS !== 'web') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    }
-    setHasCopiedToken(true);
-    setTimeout(() => setHasCopiedToken(false), 2500);
-  };
-
-  const handleClearCache = async () => {
-    Alert.alert(
-      'Clear Local Cache',
-      'This will remove all locally stored stories and reset offline caches.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const keys = await AsyncStorage.getAllKeys();
-              const feedKeys = keys.filter((k) => k.startsWith('@zerodaily_feed_cache_'));
-              await AsyncStorage.multiRemove(feedKeys);
-              Alert.alert('Cache Cleared', 'Offline feeds will refresh on next visit.');
-            } catch (err) {
-              console.warn('Failed to clear cache:', err);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleSendTestAlert = async () => {
-    if (isSendingTest) return;
-    setIsSendingTest(true);
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    }
-
-    try {
-      await scheduleTestBreakingAlert('cybersec', 2);
-      Alert.alert(
-        'Test Alert Scheduled',
-        'A breaking alert notification will arrive in 2 seconds. Minimize or lock your phone to observe the banner!'
-      );
-    } catch {
-      Alert.alert('Error', 'Unable to trigger test notification. Check app permissions.');
-    } finally {
-      setIsSendingTest(false);
-    }
-  };
-
-  const handleCheckFcmDiagnostics = async () => {
-    if (isCheckingFcm) return;
-    setIsCheckingFcm(true);
-    if (Platform.OS !== 'web') {
-      Haptics.selectionAsync().catch(() => {});
-    }
-
-    try {
-      const token = await registerForPushNotificationsAsync();
-      if (token) {
-        cachedFcmToken = token;
-        setFcmToken(token);
-        const synced = await useSettingsStore.getState().syncSubscriptions(token);
-        Alert.alert(
-          'FCM Device Registration',
-          `Your device push token was retrieved!\n\nTopic Subscriptions: ${synced ? 'Active (Connected to backend)' : 'Pending server response'}\n\nToken:\n${token}`,
-          [{ text: 'OK' }]
-        );
-      } else {
-        Alert.alert(
-          'FCM Registration Check',
-          'Could not retrieve an FCM token. Please verify that Notification permissions are allowed in your Android phone settings.',
-          [{ text: 'OK' }]
-        );
-      }
-    } catch (err: any) {
-      Alert.alert(
-        'FCM Registration Error',
-        `Error communicating with Firebase Cloud Messaging:\n${err?.message || String(err)}`,
-        [{ text: 'OK' }]
-      );
-    } finally {
-      setIsCheckingFcm(false);
-    }
-  };
-
   return (
     <Modal
       visible={visible}
       animationType="slide"
       presentationStyle="pageSheet"
       onRequestClose={onClose}
+      onShow={() => {
+        setScrollKey((k) => k + 1);
+      }}
     >
       <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
         <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -231,7 +121,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.scrollArea} contentContainerStyle={styles.contentContainer}>
+          <ScrollView
+            key={scrollKey}
+            style={styles.scrollArea}
+            contentContainerStyle={[styles.contentContainer, { flexGrow: 1 }]}
+            nestedScrollEnabled={true}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
             {/* Section: User Account & Profile */}
             <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>ACCOUNT & PROFILE</Text>
             <View style={[styles.accountCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -253,7 +150,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                       <View style={styles.badgeRow}>
                         <ShieldCheck size={12} color={colors.primary} />
                         <Text style={[styles.badgeText, { color: colors.primary }]}>
-                          Active • {user.reading_count} roasts read
+                          Active
                         </Text>
                       </View>
                     </View>
@@ -365,38 +262,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
               })}
             </View>
 
-            {/* Notification Philosophy Banner */}
-            <View
-              style={[
-                styles.infoBanner,
-                {
-                  backgroundColor: colors.primarySoft,
-                  borderColor: `${colors.primary}35`,
-                },
-              ]}
-            >
-              <Bell size={18} color={colors.primary} />
-              <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-                ZeroDaily utilizes client-managed FCM topics. Your device subscribes directly to alert channels with zero server token tracking.
-              </Text>
-            </View>
-
             {/* Section: Push Notification Channels */}
-            <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>PUSH NOTIFICATION TOPICS</Text>
-
-            {/* All Breaking Catch-All */}
-            <View style={[styles.preferenceRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <View style={styles.prefTextCol}>
-                <Text style={[styles.prefTitle, { color: colors.textPrimary }]}>All Breaking News (Global)</Text>
-                <Text style={[styles.prefSub, { color: colors.textMuted }]}>Alerts across all tech domains</Text>
-              </View>
-              <Switch
-                value={preferences.breaking_all}
-                onValueChange={toggleBreakingAll}
-                trackColor={{ false: isDark ? '#27272A' : '#E4E4E7', true: isDark ? '#3F3F46' : '#71717A' }}
-                thumbColor={preferences.breaking_all ? (isDark ? '#FFFFFF' : '#0F172A') : (isDark ? '#71717A' : '#94A3B8')}
-              />
-            </View>
+            <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>NOTIFICATION CHANNELS</Text>
 
             {/* Individual Categories */}
             {CATEGORY_LIST.filter((c) => c.key !== 'all').map((category) => {
@@ -408,7 +275,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                 >
                   <View style={styles.prefTextCol}>
                     <Text style={[styles.prefTitle, { color: colors.textPrimary }]}>{category.name}</Text>
-                    <Text style={[styles.prefSub, { color: colors.textMuted }]}>Topic: {category.fcmTopic}</Text>
                   </View>
                   <Switch
                     value={isEnabled}
@@ -419,130 +285,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                 </View>
               );
             })}
-
-            {/* Test Notification Action */}
-            <TouchableOpacity
-              activeOpacity={0.75}
-              onPress={handleSendTestAlert}
-              disabled={isSendingTest}
-              style={[
-                styles.actionItem,
-                {
-                  backgroundColor: `${colors.primary}12`,
-                  borderColor: colors.primary,
-                  marginTop: 4,
-                },
-              ]}
-            >
-              {isSendingTest ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <Zap size={18} color={colors.primary} />
-              )}
-              <View style={styles.prefTextCol}>
-                <Text style={[styles.prefTitle, { color: colors.primary }]}>Send Test Breaking Alert</Text>
-                <Text style={[styles.prefSub, { color: colors.textMuted }]}>
-                  Triggers an instant 2-second alert banner with sound & vibration
-                </Text>
-              </View>
-            </TouchableOpacity>
-
-            {/* FCM Token Diagnostics & Device Token Display Card */}
-            <View style={[styles.tokenCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <View style={styles.tokenCardHeader}>
-                <View style={styles.tokenStatusRow}>
-                  <View
-                    style={[
-                      styles.statusDot,
-                      { backgroundColor: fcmToken ? colors.primary : isCheckingFcm ? colors.warning : colors.textMuted },
-                    ]}
-                  />
-                  <Text style={[styles.tokenStatusText, { color: colors.textPrimary }]}>
-                    {fcmToken ? 'Connected to Firebase' : isCheckingFcm ? 'Querying Token...' : 'Registration Pending'}
-                  </Text>
-                </View>
-
-                <TouchableOpacity
-                  activeOpacity={0.7}
-                  onPress={handleCheckFcmDiagnostics}
-                  disabled={isCheckingFcm}
-                  style={[styles.refreshPill, { borderColor: colors.border, backgroundColor: colors.background }]}
-                >
-                  {isCheckingFcm ? (
-                    <ActivityIndicator size="small" color={colors.primary} />
-                  ) : (
-                    <>
-                      <RefreshCw size={12} color={colors.textSecondary} />
-                      <Text style={[styles.refreshPillText, { color: colors.textSecondary }]}>Refresh</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </View>
-
-              {/* Monospace Token Box */}
-              <View style={[styles.tokenBox, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                <Text
-                  selectable={true}
-                  style={[styles.tokenValueText, { color: fcmToken ? colors.textPrimary : colors.textMuted }]}
-                  numberOfLines={3}
-                >
-                  {fcmToken || 'Tap "Refresh" to query native FCM push token from Google Play Services.'}
-                </Text>
-              </View>
-
-              {/* Action Buttons: Copy Token */}
-              <View style={styles.tokenActionRow}>
-                <TouchableOpacity
-                  activeOpacity={0.75}
-                  onPress={handleCopyFcmToken}
-                  disabled={isCheckingFcm}
-                  style={[
-                    styles.copyTokenBtn,
-                    {
-                      backgroundColor: hasCopiedToken ? colors.primary : `${colors.primary}18`,
-                      borderColor: colors.primary,
-                    },
-                  ]}
-                >
-                  {hasCopiedToken ? (
-                    <Check size={15} color="#FFFFFF" />
-                  ) : (
-                    <Copy size={15} color={colors.primary} />
-                  )}
-                  <Text
-                    style={[
-                      styles.copyTokenBtnText,
-                      { color: hasCopiedToken ? '#FFFFFF' : colors.primary },
-                    ]}
-                  >
-                    {hasCopiedToken ? 'Copied Token to Clipboard!' : 'Copy Device Push Token'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              <Text style={[styles.tokenHelperText, { color: colors.textMuted }]}>
-                Paste this token into Firebase Console &gt; Cloud Messaging &gt; &quot;Send test message&quot; to test instant 2-second push delivery to this device.
-              </Text>
-            </View>
-
-            {/* Section: Storage & Maintenance */}
-            <Text style={[styles.sectionHeader, { color: colors.textMuted, marginTop: 24 }]}>
-              STORAGE & CACHE
-            </Text>
-
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={handleClearCache}
-              style={[styles.actionItem, { backgroundColor: colors.surface, borderColor: colors.border }]}
-            >
-              <Trash2 size={18} color={colors.danger} />
-              <View style={styles.prefTextCol}>
-                <Text style={[styles.prefTitle, { color: colors.danger }]}>Clear Offline Story Cache</Text>
-                <Text style={[styles.prefSub, { color: colors.textMuted }]}>
-                  Purges cached feed cards to reclaim local device space
-                </Text>
-              </View>
-            </TouchableOpacity>
 
             {/* About Info */}
             <View style={styles.aboutFooter}>
@@ -712,20 +454,6 @@ const styles = StyleSheet.create({
   themeBtnText: {
     fontSize: 13,
   },
-  infoBanner: {
-    flexDirection: 'row',
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 20,
-    gap: 10,
-    alignItems: 'center',
-  },
-  infoText: {
-    flex: 1,
-    fontSize: 12,
-    lineHeight: 18,
-  },
   sectionHeader: {
     fontSize: 11,
     fontWeight: '800',
@@ -741,36 +469,13 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     borderWidth: 1,
   },
-  actionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 10,
-    borderWidth: 1,
-    gap: 12,
-  },
   prefTextCol: {
     flex: 1,
     marginRight: 10,
   },
-  catRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  colorDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
   prefTitle: {
     fontSize: 15,
     fontWeight: '600',
-  },
-  prefSub: {
-    fontSize: 11.5,
-    marginTop: 2,
   },
   aboutFooter: {
     flexDirection: 'row',
@@ -781,77 +486,5 @@ const styles = StyleSheet.create({
   },
   aboutText: {
     fontSize: 11.5,
-  },
-  tokenCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 14,
-    marginTop: 4,
-    gap: 12,
-  },
-  tokenCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  tokenStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  tokenStatusText: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  refreshPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 9999,
-    borderWidth: 1,
-  },
-  refreshPillText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  tokenBox: {
-    borderRadius: 10,
-    borderWidth: 1,
-    padding: 10,
-  },
-  tokenValueText: {
-    fontSize: 11,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    lineHeight: 16,
-  },
-  tokenActionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  copyTokenBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    borderWidth: 1,
-    flex: 1,
-  },
-  copyTokenBtnText: {
-    fontSize: 12.5,
-    fontWeight: '700',
-  },
-  tokenHelperText: {
-    fontSize: 11,
-    lineHeight: 16,
   },
 });
