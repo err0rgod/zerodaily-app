@@ -1,5 +1,10 @@
 import * as Haptics from 'expo-haptics';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+import {
+  GoogleSignin,
+  statusCodes,
+  isCancelledResponse,
+  isSuccessResponse,
+} from '@react-native-google-signin/google-signin';
 import {
   AlertCircle,
   Bookmark,
@@ -140,7 +145,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
       const response = await GoogleSignin.signIn();
 
-      const idToken = response?.data?.idToken || (response as any)?.idToken;
+      if (isCancelledResponse(response) || (response as any)?.type === 'cancelled') {
+        return;
+      }
+
+      const idToken = isSuccessResponse(response)
+        ? response.data.idToken
+        : (response as any)?.data?.idToken || (response as any)?.idToken;
+
       if (!idToken) {
         throw new Error('Google Sign-In did not return an ID token.');
       }
@@ -161,7 +173,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         setErrorMessage(result.error || 'Failed to authenticate with Google.');
       }
     } catch (error: any) {
-      if (error?.code === statusCodes.SIGN_IN_CANCELLED) {
+      if (
+        error?.code === statusCodes.SIGN_IN_CANCELLED ||
+        error?.code === '13' ||
+        error?.code === '12501'
+      ) {
         return;
       } else if (error?.code === statusCodes.IN_PROGRESS) {
         setErrorMessage('Google Sign-In is already in progress.');
