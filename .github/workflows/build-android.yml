@@ -124,14 +124,34 @@ jobs:
 
           TAG_NAME="${{ steps.release_version.outputs.tag }}"
 
-          # Generate SHA256 Checksums (.txt)
+          # Calculate SHA256 & APK size
           cd build_output
+          APK_SHA256=$(sha256sum ZeroDaily.apk | awk '{print $1}')
+          APK_SIZE=$(ls -lh ZeroDaily.apk | awk '{print $5}')
+          echo "sha256=$APK_SHA256" >> $GITHUB_OUTPUT
+          echo "apk_size=$APK_SIZE" >> $GITHUB_OUTPUT
+
+          # Generate SHA256 Checksums (.txt)
           sha256sum ZeroDaily.apk > ZeroDaily-SHA256.txt
           echo "Commit SHA: ${{ github.sha }}" >> ZeroDaily-SHA256.txt
           echo "Release Tag: $TAG_NAME" >> ZeroDaily-SHA256.txt
           echo "Build Timestamp UTC: $(date -u)" >> ZeroDaily-SHA256.txt
           cat ZeroDaily-SHA256.txt
           cd ..
+
+          # Output directly to GitHub Actions Step Summary
+          echo "## 📱 ZeroDaily Android APK Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Release Tag** | \`${TAG_NAME}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **APK File** | \`ZeroDaily.apk\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **APK File Size** | \`${APK_SIZE}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **SHA-256 Checksum** | \`${APK_SHA256}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Commit SHA** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Build Timestamp** | \`$(date -u)\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> 🔐 **Direct SHA-256**: \`${APK_SHA256}\`" >> $GITHUB_STEP_SUMMARY
 
       - name: 🏷️ Publish GitHub Release
         uses: softprops/action-gh-release@v2
@@ -142,10 +162,16 @@ jobs:
             ### 📱 ZeroDaily Mobile Release ${{ steps.release_version.outputs.tag }}
             - **Standalone Release Build**: Full offline JS bundle embedded (no Metro dev server required).
             - **Backend API**: Configured directly to `https://api.zerodaily.in`.
+            - **APK File Size**: `${{ steps.prepare_assets.outputs.apk_size }}`
             - **Commit SHA**: `${{ github.sha }}`
 
+            #### 🔐 Direct SHA-256 Checksum:
+            ```text
+            ${{ steps.prepare_assets.outputs.sha256 }}  ZeroDaily.apk
+            ```
+
             #### 📦 Release Assets Included:
-            - `ZeroDaily.apk` — Standalone Android Release APK
+            - [`ZeroDaily.apk`](https://github.com/err0rgod/zerodaily-app/releases/download/${{ steps.release_version.outputs.tag }}/ZeroDaily.apk) — Standalone Android Release APK (${{ steps.prepare_assets.outputs.apk_size }})
             - `ZeroDaily-SHA256.txt` — SHA256 Checksum and Git Commit verification
           files: |
             build_output/ZeroDaily.apk
