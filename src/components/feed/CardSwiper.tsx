@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { Check, RotateCcw } from 'lucide-react-native';
+import { Check, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react-native';
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -14,28 +14,43 @@ import {
   Text,
   View,
 } from 'react-native';
-import { CATEGORIES, getDynamicFallbackImage } from '../../constants/categories';
+import { CATEGORIES, CATEGORY_LIST, getDynamicFallbackImage } from '../../constants/categories';
 import { useFeedStore } from '../../store/feedStore';
 import { useTheme } from '../../store/themeStore';
 import { useUserStore } from '../../store/userStore';
-import { Article, CategoryKey } from '../../types';
+import { Article, CategoryKey, CategoryMeta } from '../../types';
 import { readingTracker } from '../../utils/readingTracker';
 import { NewsCard } from './NewsCard';
 import { ScreenGlareLoader } from './ScreenGlareLoader';
+import { DomainIcon } from '../common/DomainIcon';
 
 interface CardSwiperProps {
   onOpenFullRoast: (article: Article) => void;
   onOpenSourceLink: (url: string) => void;
   onOpenImageViewer?: (imageUri: string, heading: string, category: CategoryKey) => void;
+  onSelectCategory?: (category: CategoryKey) => void;
 }
 
 /** Drag distance at the top card past which releasing triggers a refresh. */
 const PULL_REFRESH_TRIGGER_PX = 55;
 
+/** Category visual icon mapping for peek badges and announcement banner */
+const DOMAIN_ICONS: Record<CategoryKey, string> = {
+  all: '🔥',
+  cybersec: '🛡️',
+  ai: '🤖',
+  programming: '💻',
+  robotics: '🦾',
+  defense_aerospace: '🚀',
+  hardware: '⚡',
+  finance: '📈',
+};
+
 export const CardSwiper: React.FC<CardSwiperProps> = ({
   onOpenFullRoast,
   onOpenSourceLink,
   onOpenImageViewer,
+  onSelectCategory,
 }) => {
   const {
     articles,
@@ -47,6 +62,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     loadInitialFeed,
     isLoading,
     isAllCaughtUp,
+    setCategory,
   } = useFeedStore();
 
   const { colors, isDark } = useTheme();
@@ -67,12 +83,21 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
 
   const isAnimatingRef = useRef<boolean>(false);
   const panY = useRef(new Animated.Value(0)).current;
+  const panX = useRef(new Animated.Value(0)).current;
+
+  // Active gesture lock: prevents diagonal wobbling or accidental vertical scrolls
+  const gestureAxisRef = useRef<'none' | 'vertical' | 'horizontal'>('none');
+  const hasFiredThresholdHapticRef = useRef<boolean>(false);
+
+  // Floating domain change announcement toast
+  const [domainBanner, setDomainBanner] = useState<CategoryMeta | null>(null);
+  const domainBannerOpacity = useRef(new Animated.Value(0)).current;
+  const domainBannerTranslateY = useRef(new Animated.Value(-20)).current;
+  const domainBannerScale = useRef(new Animated.Value(0.9)).current;
+  const domainBannerTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   /**
-   * The pull-to-refresh badge is mounted only while a drag is genuinely in
-   * progress. Its old visibility came purely from an animated value, and with
-   * the native driver that value could survive the deck unmounting mid-refresh
-   * and strand the badge on screen until the next touch.
+   * The pull-to-refresh badge is mounted only while a drag is genuinely in progress.
    */
   const [isPulling, setIsPulling] = useState(false);
   const [canRelease, setCanRelease] = useState(false);
@@ -98,7 +123,6 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     if (containerHeightRef.current > 60) {
       return containerHeightRef.current;
     }
-    // Fallback based on window height minus top bar and bottom nav estimates
     return Math.max(windowDim.height - 110, 400);
   }, [windowDim.height]);
 
@@ -163,7 +187,6 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
           Math.min(elapsedSeconds, 120)
         );
       } else if (elapsedSeconds >= 0.5 && !isAlreadyRead) {
-        // Never send skip or downgrade an article already consumed (e.g. via Full Roast)
         readingTracker.markArticleAsSkipped(
           prevArticle.id,
           prevArticle.category,
@@ -177,11 +200,9 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
         );
       }
 
-      // Reset dwell timer for the new incoming card
       cardStartTimeRef.current = Date.now();
       prevArticleRef.current = currentArticle || null;
     } else if (!prevArticle && currentArticle) {
-      // First card mount: start dwell clock
       cardStartTimeRef.current = Date.now();
       prevArticleRef.current = currentArticle;
     }
@@ -209,11 +230,23 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
   useLayoutEffect(() => {
     panY.stopAnimation();
     panY.setValue(0);
-    isAnimatingRef.current = false;
+    if (!isAnimatingRef.current) {
+      panX.stopAnimation();
+      panX.setValue(0);
+    }
     canReleaseRef.current = false;
     setIsPulling(false);
     setCanRelease(false);
-  }, [category, currentIndex, panY]);
+  }, [category, currentIndex, panY, panX]);
+
+  // Clean up banner timer on unmount
+  useEffect(() => {
+    return () => {
+      if (domainBannerTimerRef.current) {
+        clearTimeout(domainBannerTimerRef.current);
+      }
+    };
+  }, []);
 
   // Capture container height dynamically
   const handleLayout = (e: LayoutChangeEvent) => {
@@ -266,6 +299,115 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     });
   }, [getCardHeight, panY, setCurrentIndex, refreshFeed]);
 
+  // Shows temporary floating announcement banner when a domain is switched
+  const showDomainChangeBanner = useCallback(
+    (cat: CategoryMeta) => {
+      if (domainBannerTimerRef.current) {
+        clearTimeout(domainBannerTimerRef.current);
+      }
+      setDomainBanner(cat);
+      domainBannerOpacity.setValue(0);
+      domainBannerTranslateY.setValue(-20);
+      domainBannerScale.setValue(0.9);
+
+      Animated.parallel([
+        Animated.timing(domainBannerOpacity, {
+          toValue: 1,
+          duration: 180,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+        Animated.spring(domainBannerTranslateY, {
+          toValue: 0,
+          friction: 6,
+          tension: 80,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+        Animated.spring(domainBannerScale, {
+          toValue: 1,
+          friction: 6,
+          tension: 80,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+      ]).start();
+
+      domainBannerTimerRef.current = setTimeout(() => {
+        Animated.timing(domainBannerOpacity, {
+          toValue: 0,
+          duration: 220,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: Platform.OS !== 'web',
+        }).start(() => {
+          setDomainBanner(null);
+        });
+      }, 1400);
+    },
+    [domainBannerOpacity, domainBannerTranslateY, domainBannerScale]
+  );
+
+  // Executes high-quality domain change animation (slide out + opposite slide-in)
+  const performDomainSwitch = useCallback(
+    (nextCat: CategoryMeta, direction: 'left' | 'right') => {
+      if (isAnimatingRef.current) return;
+      isAnimatingRef.current = true;
+      const width = windowDim.width;
+      const exitX = direction === 'left' ? -width * 1.15 : width * 1.15;
+      const enterFromX = direction === 'left' ? width * 0.35 : -width * 0.35;
+
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      }
+
+      // 1. Slide active card off screen in the swipe direction
+      Animated.timing(panX, {
+        toValue: exitX,
+        duration: 180,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: Platform.OS !== 'web',
+      }).start(async () => {
+        // 2. Announce new domain with floating badge
+        showDomainChangeBanner(nextCat);
+
+        // 3. Switch active category
+        if (onSelectCategory) {
+          onSelectCategory(nextCat.key);
+        } else {
+          await setCategory(nextCat.key);
+        }
+
+        // 4. Position incoming card on opposite side and spring in
+        panX.setValue(enterFromX);
+        panY.setValue(0);
+
+        Animated.spring(panX, {
+          toValue: 0,
+          friction: 8,
+          tension: 55,
+          useNativeDriver: Platform.OS !== 'web',
+        }).start(() => {
+          isAnimatingRef.current = false;
+        });
+      });
+    },
+    [windowDim.width, panX, panY, onSelectCategory, setCategory, showDomainChangeBanner]
+  );
+
+  const goToNextDomain = useCallback(() => {
+    if (isAnimatingRef.current) return;
+    const catIndex = CATEGORY_LIST.findIndex((c) => c.key === category);
+    if (catIndex < CATEGORY_LIST.length - 1) {
+      performDomainSwitch(CATEGORY_LIST[catIndex + 1], 'left');
+    }
+  }, [category, performDomainSwitch]);
+
+  const goToPrevDomain = useCallback(() => {
+    if (isAnimatingRef.current) return;
+    const catIndex = CATEGORY_LIST.findIndex((c) => c.key === category);
+    if (catIndex > 0) {
+      performDomainSwitch(CATEGORY_LIST[catIndex - 1], 'right');
+    }
+  }, [category, performDomainSwitch]);
+
   // Web desktop mouse wheel and arrow key shortcuts
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
@@ -291,6 +433,12 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
       } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
         e.preventDefault();
         goToPrevCard();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        goToNextDomain();
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        goToPrevDomain();
       }
     };
 
@@ -301,10 +449,9 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
       window.removeEventListener('wheel', handleWheel);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [goToNextCard, goToPrevCard]);
+  }, [goToNextCard, goToPrevCard, goToNextDomain, goToPrevDomain]);
 
-  // Vertical-only card deck. The full story is reached through the arrow
-  // button on the card, so no horizontal axis is claimed here.
+  // Dual-Axis PanResponder: Vertical = Article Navigation, Horizontal = Domain Switch
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
@@ -312,96 +459,194 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
 
       onMoveShouldSetPanResponder: (_, gesture) => {
         if (isAnimatingRef.current) return false;
-        return (
-          Math.abs(gesture.dy) > 12 && Math.abs(gesture.dy) > Math.abs(gesture.dx) * 0.75
-        );
+        const dx = Math.abs(gesture.dx);
+        const dy = Math.abs(gesture.dy);
+        if (dx < 8 && dy < 8) return false;
+        const isVertical = dy > dx * 0.75 && dy > 10;
+        const isHorizontal = dx > dy * 0.75 && dx > 10;
+        return isVertical || isHorizontal;
       },
       onMoveShouldSetPanResponderCapture: () => false,
 
       onPanResponderGrant: () => {
         panY.stopAnimation();
+        panX.stopAnimation();
         isAnimatingRef.current = false;
-        setIsPulling(true);
+        gestureAxisRef.current = 'none';
+        hasFiredThresholdHapticRef.current = false;
+        setIsPulling(false);
       },
 
       onPanResponderMove: (_, gesture) => {
         if (isAnimatingRef.current) return;
-        setReleaseReady(gesture.dy > PULL_REFRESH_TRIGGER_PX);
-        panY.setValue(gesture.dy);
+
+        // Lock in gesture axis once direction is unambiguous
+        if (gestureAxisRef.current === 'none') {
+          const dx = Math.abs(gesture.dx);
+          const dy = Math.abs(gesture.dy);
+          if (dx > dy && dx > 6) {
+            gestureAxisRef.current = 'horizontal';
+          } else if (dy > dx && dy > 6) {
+            gestureAxisRef.current = 'vertical';
+            setIsPulling(true);
+          }
+        }
+
+        if (gestureAxisRef.current === 'vertical') {
+          setReleaseReady(gesture.dy > PULL_REFRESH_TRIGGER_PX);
+          panY.setValue(gesture.dy);
+        } else if (gestureAxisRef.current === 'horizontal') {
+          const catIndex = CATEGORY_LIST.findIndex((c) => c.key === category);
+          const atFirst = catIndex === 0;
+          const atLast = catIndex === CATEGORY_LIST.length - 1;
+
+          // Boundary rubber-band resistance at list edges
+          let moveX = gesture.dx;
+          if ((atFirst && moveX > 0) || (atLast && moveX < 0)) {
+            moveX = moveX * 0.22;
+          }
+          panX.setValue(moveX);
+
+          // Threshold tactile pulse when crossing the commitment line
+          const threshold = Math.min(windowDim.width * 0.22, 90);
+          const reached =
+            Math.abs(moveX) >= threshold && !((atFirst && moveX > 0) || (atLast && moveX < 0));
+
+          if (reached && !hasFiredThresholdHapticRef.current) {
+            hasFiredThresholdHapticRef.current = true;
+            if (Platform.OS !== 'web') {
+              Haptics.selectionAsync().catch(() => {});
+            }
+          } else if (!reached && hasFiredThresholdHapticRef.current) {
+            hasFiredThresholdHapticRef.current = false;
+          }
+        }
       },
 
       onPanResponderRelease: (_, gesture) => {
+        const axis = gestureAxisRef.current;
+        gestureAxisRef.current = 'none';
+        hasFiredThresholdHapticRef.current = false;
         setIsPulling(false);
         setReleaseReady(false);
+
         if (isAnimatingRef.current) return;
 
-        const height = getCardHeight();
-        const threshold = Math.min(height * 0.12, 80); // Distance threshold (80px max)
-        const isUpSwipe = gesture.dy < -threshold || gesture.vy < -0.25;
-        const isDownSwipe = gesture.dy > threshold || gesture.vy > 0.25;
+        if (axis === 'horizontal') {
+          const width = windowDim.width;
+          const threshold = Math.min(width * 0.22, 90);
+          const catIndex = CATEGORY_LIST.findIndex((c) => c.key === category);
 
-        const curr = currentIndexRef.current;
-        const total = articlesRef.current.length;
+          const isLeftSwipe = gesture.dx < -threshold || gesture.vx < -0.3;
+          const isRightSwipe = gesture.dx > threshold || gesture.vx > 0.3;
 
-        if (isUpSwipe && curr < total - 1) {
-          // Swipe up: Active card slides away, next card underneath scales up
-          isAnimatingRef.current = true;
-          Animated.timing(panY, {
-            toValue: -height,
-            duration: 220,
-            easing: Easing.out(Easing.quad),
-            useNativeDriver: Platform.OS !== 'web',
-          }).start(() => {
-            setCurrentIndex(curr + 1);
-          });
-        } else if (isDownSwipe && curr > 0) {
-          // Swipe down: Active card slides down, previous card underneath scales up
-          isAnimatingRef.current = true;
-          Animated.timing(panY, {
-            toValue: height,
-            duration: 220,
-            easing: Easing.out(Easing.quad),
-            useNativeDriver: Platform.OS !== 'web',
-          }).start(() => {
-            setCurrentIndex(curr - 1);
-          });
-        } else {
-          // Pull-down at the top card triggers a refresh; anything else snaps back
-          if (isDownSwipe && curr === 0 && gesture.dy > PULL_REFRESH_TRIGGER_PX) {
-            if (Platform.OS !== 'web') {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-            }
-            refreshFeed();
+          const canGoNext = isLeftSwipe && catIndex < CATEGORY_LIST.length - 1;
+          const canGoPrev = isRightSwipe && catIndex > 0;
+
+          if (canGoNext) {
+            performDomainSwitch(CATEGORY_LIST[catIndex + 1], 'left');
+          } else if (canGoPrev) {
+            performDomainSwitch(CATEGORY_LIST[catIndex - 1], 'right');
+          } else {
+            isAnimatingRef.current = true;
+            Animated.spring(panX, {
+              toValue: 0,
+              friction: 7,
+              tension: 50,
+              useNativeDriver: Platform.OS !== 'web',
+            }).start(() => {
+              isAnimatingRef.current = false;
+            });
           }
-          Animated.spring(panY, {
-            toValue: 0,
-            friction: 7,
-            tension: 50,
-            useNativeDriver: Platform.OS !== 'web',
-          }).start(() => {
-            isAnimatingRef.current = false;
-          });
+        } else if (axis === 'vertical') {
+          const height = getCardHeight();
+          const threshold = Math.min(height * 0.12, 80);
+          const isUpSwipe = gesture.dy < -threshold || gesture.vy < -0.25;
+          const isDownSwipe = gesture.dy > threshold || gesture.vy > 0.25;
+
+          const curr = currentIndexRef.current;
+          const total = articlesRef.current.length;
+
+          if (isUpSwipe && curr < total - 1) {
+            isAnimatingRef.current = true;
+            Animated.timing(panY, {
+              toValue: -height,
+              duration: 220,
+              easing: Easing.out(Easing.quad),
+              useNativeDriver: Platform.OS !== 'web',
+            }).start(() => {
+              setCurrentIndex(curr + 1);
+            });
+          } else if (isDownSwipe && curr > 0) {
+            isAnimatingRef.current = true;
+            Animated.timing(panY, {
+              toValue: height,
+              duration: 220,
+              easing: Easing.out(Easing.quad),
+              useNativeDriver: Platform.OS !== 'web',
+            }).start(() => {
+              setCurrentIndex(curr - 1);
+            });
+          } else {
+            if (isDownSwipe && curr === 0 && gesture.dy > PULL_REFRESH_TRIGGER_PX) {
+              if (Platform.OS !== 'web') {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              }
+              refreshFeed();
+            }
+            Animated.spring(panY, {
+              toValue: 0,
+              friction: 7,
+              tension: 50,
+              useNativeDriver: Platform.OS !== 'web',
+            }).start(() => {
+              isAnimatingRef.current = false;
+            });
+          }
+        } else {
+          Animated.parallel([
+            Animated.spring(panY, {
+              toValue: 0,
+              friction: 7,
+              tension: 50,
+              useNativeDriver: Platform.OS !== 'web',
+            }),
+            Animated.spring(panX, {
+              toValue: 0,
+              friction: 7,
+              tension: 50,
+              useNativeDriver: Platform.OS !== 'web',
+            }),
+          ]).start();
         }
       },
 
       onPanResponderTerminationRequest: () => false,
       onPanResponderTerminate: () => {
         isAnimatingRef.current = false;
+        gestureAxisRef.current = 'none';
+        hasFiredThresholdHapticRef.current = false;
         setIsPulling(false);
         setReleaseReady(false);
-        Animated.spring(panY, {
-          toValue: 0,
-          friction: 7,
-          tension: 50,
-          useNativeDriver: Platform.OS !== 'web',
-        }).start();
+        Animated.parallel([
+          Animated.spring(panY, {
+            toValue: 0,
+            friction: 7,
+            tension: 50,
+            useNativeDriver: Platform.OS !== 'web',
+          }),
+          Animated.spring(panX, {
+            toValue: 0,
+            friction: 7,
+            tension: 50,
+            useNativeDriver: Platform.OS !== 'web',
+          }),
+        ]).start();
       },
     })
   ).current;
 
-  // The deck stays mounted while a refresh is in flight. Swapping it for the
-  // skeleton used to unmount the very view the pan gesture was attached to and
-  // blank the card the user was reading.
+  // The deck stays mounted while a refresh is in flight.
   if (articles.length === 0) {
     if (isLoading) {
       const renderHeight = containerHeight > 60 ? containerHeight : getCardHeight();
@@ -437,7 +682,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
 
   const orderedSlots = [prevSlot, nextSlot, activeSlot];
 
-  // Deck Layer Transformations:
+  // Deck Layer Vertical Transformations:
   // 1. Next Card Underneath: scales from 0.94 up to 1.0, translates Y from 14px to 0px
   const nextCardScale = panY.interpolate({
     inputRange: [-height, 0],
@@ -488,17 +733,86 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     extrapolate: 'clamp',
   });
 
-  // 3. Active Card (ALWAYS ON TOP at zIndex: 10):
-  // When swiping up: slides up to -height
-  // When swiping down at card 0: rubber bands up to 90px
-  // When swiping down at card > 0: slides down to +height
+  // 3. Active Card Vertical Translation
   const activeCardTranslateY = panY.interpolate({
     inputRange: [-height, 0, height],
-    outputRange: [
-      -height,
+    outputRange: [-height, 0, currentIndex === 0 ? 90 : height],
+    extrapolate: 'clamp',
+  });
+
+  // 4. Active Card Horizontal Translation, Tilt & Scale for Domain Change
+  const cardRotation = panX.interpolate({
+    inputRange: [-windowDim.width, 0, windowDim.width],
+    outputRange: ['-6deg', '0deg', '6deg'],
+    extrapolate: 'clamp',
+  });
+
+  const cardScale = panX.interpolate({
+    inputRange: [-windowDim.width, 0, windowDim.width],
+    outputRange: [0.93, 1, 0.93],
+    extrapolate: 'clamp',
+  });
+
+  const activeCardOpacity = panX.interpolate({
+    inputRange: [
+      -windowDim.width,
+      -windowDim.width * 0.45,
       0,
-      currentIndex === 0 ? 90 : height,
+      windowDim.width * 0.45,
+      windowDim.width,
     ],
+    outputRange: [0.35, 0.88, 1, 0.88, 0.35],
+    extrapolate: 'clamp',
+  });
+
+  // Domain peek resolution
+  const catIndex = CATEGORY_LIST.findIndex((c) => c.key === category);
+  const nextCat = catIndex < CATEGORY_LIST.length - 1 ? CATEGORY_LIST[catIndex + 1] : null;
+  const prevCat = catIndex > 0 ? CATEGORY_LIST[catIndex - 1] : null;
+
+  // Next category peek badge (when dragging left, panX < 0)
+  const nextPeekOpacity = panX.interpolate({
+    inputRange: [-85, -20, 0],
+    outputRange: [1, 0.3, 0],
+    extrapolate: 'clamp',
+  });
+  const nextPeekTranslateX = panX.interpolate({
+    inputRange: [-100, 0],
+    outputRange: [0, 24],
+    extrapolate: 'clamp',
+  });
+  const nextPeekScale = panX.interpolate({
+    inputRange: [-100, -25, 0],
+    outputRange: [1, 0.85, 0.7],
+    extrapolate: 'clamp',
+  });
+
+  // Previous category peek badge (when dragging right, panX > 0)
+  const prevPeekOpacity = panX.interpolate({
+    inputRange: [0, 20, 85],
+    outputRange: [0, 0.3, 1],
+    extrapolate: 'clamp',
+  });
+  const prevPeekTranslateX = panX.interpolate({
+    inputRange: [0, 100],
+    outputRange: [-24, 0],
+    extrapolate: 'clamp',
+  });
+  const prevPeekScale = panX.interpolate({
+    inputRange: [0, 25, 100],
+    outputRange: [0.7, 0.85, 1],
+    extrapolate: 'clamp',
+  });
+
+  // Edge boundary resistance peek
+  const edgeAtStartOpacity = panX.interpolate({
+    inputRange: [0, 15, 60],
+    outputRange: [0, 0.25, 0.85],
+    extrapolate: 'clamp',
+  });
+  const edgeAtEndOpacity = panX.interpolate({
+    inputRange: [-60, -15, 0],
+    outputRange: [0.85, 0.25, 0],
     extrapolate: 'clamp',
   });
 
@@ -544,8 +858,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
           </Animated.View>
         )}
 
-        {/* Refresh-in-flight pill. Driven by store state alone, so it cannot
-            outlive the request the way an animated value could. */}
+        {/* Refresh-in-flight pill */}
         {isRefreshing && (
           <View
             style={[
@@ -576,6 +889,124 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
           </View>
         )}
 
+        {/* Floating Domain Switch Announcement Toast */}
+        {domainBanner && (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.floatingDomainBanner,
+              {
+                backgroundColor: isDark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.96)',
+                borderColor: domainBanner.accentColor,
+                opacity: domainBannerOpacity,
+                transform: [
+                  { translateY: domainBannerTranslateY },
+                  { scale: domainBannerScale },
+                ],
+              },
+            ]}
+          >
+            <DomainIcon category={domainBanner.key} size={16} color={domainBanner.accentColor} />
+            <Text style={[styles.bannerDomainTitle, { color: colors.textPrimary }]}>
+              {domainBanner.name}
+            </Text>
+          </Animated.View>
+        )}
+
+        {/* Next Domain Peek Indicator (appears on right edge when sliding left) */}
+        {nextCat && (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.domainPeekBadge,
+              styles.domainPeekRight,
+              {
+                backgroundColor: isDark ? 'rgba(15, 23, 42, 0.94)' : 'rgba(255, 255, 255, 0.95)',
+                borderColor: nextCat.accentColor,
+                opacity: nextPeekOpacity,
+                transform: [
+                  { translateX: nextPeekTranslateX },
+                  { scale: nextPeekScale },
+                ],
+              },
+            ]}
+          >
+            <DomainIcon category={nextCat.key} size={15} color={nextCat.accentColor} />
+            <Text style={[styles.peekCategoryName, { color: colors.textPrimary }]}>
+              {nextCat.name}
+            </Text>
+            <ChevronRight size={15} color={nextCat.accentColor} strokeWidth={2.5} />
+          </Animated.View>
+        )}
+
+        {/* Previous Domain Peek Indicator (appears on left edge when sliding right) */}
+        {prevCat && (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.domainPeekBadge,
+              styles.domainPeekLeft,
+              {
+                backgroundColor: isDark ? 'rgba(15, 23, 42, 0.94)' : 'rgba(255, 255, 255, 0.95)',
+                borderColor: prevCat.accentColor,
+                opacity: prevPeekOpacity,
+                transform: [
+                  { translateX: prevPeekTranslateX },
+                  { scale: prevPeekScale },
+                ],
+              },
+            ]}
+          >
+            <ChevronLeft size={15} color={prevCat.accentColor} strokeWidth={2.5} />
+            <DomainIcon category={prevCat.key} size={15} color={prevCat.accentColor} />
+            <Text style={[styles.peekCategoryName, { color: colors.textPrimary }]}>
+              {prevCat.name}
+            </Text>
+          </Animated.View>
+        )}
+
+        {/* At Start Edge Indicator */}
+        {catIndex === 0 && (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.domainPeekBadge,
+              styles.domainPeekLeft,
+              {
+                backgroundColor: isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.92)',
+                borderColor: colors.border,
+                opacity: edgeAtStartOpacity,
+              },
+            ]}
+          >
+            <DomainIcon category="all" size={14} color={colors.textMuted} />
+            <Text style={[styles.peekCategoryName, { color: colors.textMuted }]}>
+              First Topic
+            </Text>
+          </Animated.View>
+        )}
+
+        {/* At End Edge Indicator */}
+        {catIndex === CATEGORY_LIST.length - 1 && (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.domainPeekBadge,
+              styles.domainPeekRight,
+              {
+                backgroundColor: isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.92)',
+                borderColor: colors.border,
+                opacity: edgeAtEndOpacity,
+              },
+            ]}
+          >
+            <Text style={[styles.peekCategoryName, { color: colors.textMuted }]}>
+              Last Topic
+            </Text>
+            <DomainIcon category="finance" size={14} color={colors.textMuted} />
+          </Animated.View>
+        )}
+
         {/* PERSISTENT 3-SLOT DECK: Pre-mounts incoming cards so images never blink across slides */}
         {orderedSlots.map((slotIndex) => {
           const article = getSlotArticle(slotIndex);
@@ -586,13 +1017,18 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
           const isPrev = slotIndex === prevSlot;
 
           const layerTransform = isCurrent
-            ? [{ translateY: activeCardTranslateY }]
+            ? [
+                { translateY: activeCardTranslateY },
+                { translateX: panX },
+                { rotate: cardRotation },
+                { scale: cardScale },
+              ]
             : isNext
             ? [{ translateY: nextCardTranslateY }, { scale: nextCardScale }]
             : [{ translateY: prevCardTranslateY }, { scale: prevCardScale }];
 
           const layerOpacity = isCurrent
-            ? 1
+            ? activeCardOpacity
             : isNext
             ? nextCardOpacity
             : prevCardOpacity;
@@ -712,6 +1148,66 @@ const styles = StyleSheet.create({
   pullRefreshText: {
     fontSize: 11.5,
     fontWeight: '600',
+  },
+  domainPeekBadge: {
+    position: 'absolute',
+    top: '46%',
+    zIndex: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 9999,
+    borderWidth: 1.5,
+    gap: 7,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 7,
+    elevation: 5,
+  },
+  domainPeekRight: {
+    right: 14,
+  },
+  domainPeekLeft: {
+    left: 14,
+  },
+  peekDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  peekCategoryName: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.1,
+  },
+  peekEmoji: {
+    fontSize: 15,
+  },
+  floatingDomainBanner: {
+    position: 'absolute',
+    top: 10,
+    alignSelf: 'center',
+    zIndex: 100,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 9999,
+    borderWidth: 1.5,
+    gap: 8,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+    elevation: 7,
+  },
+  bannerEmoji: {
+    fontSize: 16,
+  },
+  bannerDomainTitle: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
   emptyContainer: {
     flex: 1,

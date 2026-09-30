@@ -176,6 +176,7 @@ export default function App() {
                 onOpenFullRoast={handleOpenFullRoast}
                 onOpenSourceLink={handleOpenSource}
                 onOpenImageViewer={handleOpenImageViewer}
+                onSelectCategory={handleCategorySelect}
               />
 
               {/* 3. 3-Option Bottom Navigation Bar (Home, Saved, Settings) */}

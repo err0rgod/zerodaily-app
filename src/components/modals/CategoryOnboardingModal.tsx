@@ -18,6 +18,7 @@ import { registerForPushNotificationsAsync } from '../../services/notificationSe
 import { useSettingsStore } from '../../store/settingsStore';
 import { useTheme } from '../../store/themeStore';
 import { CategoryKey } from '../../types';
+import { DomainIcon } from '../common/DomainIcon';
 
 export const ONBOARDING_COMPLETED_KEY = '@zerodaily_onboarding_completed';
 
@@ -172,7 +173,9 @@ export const CategoryOnboardingModal: React.FC<CategoryOnboardingModalProps> = (
                     ]}
                   >
                     <View style={styles.boxHeaderRow}>
-                      <View style={[styles.boxDot, { backgroundColor: catColor }]} />
+                      <View style={[styles.boxIconWrapper, { backgroundColor: `${catColor}18` }]}>
+                        <DomainIcon category={cat.key} size={15} color={catColor} />
+                      </View>
                       <View
                         style={[
                           styles.boxCheckCircle,
@@ -283,10 +286,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 8,
   },
-  boxDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  boxIconWrapper: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   boxCheckCircle: {
     width: 20,

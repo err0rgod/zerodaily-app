@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-nati
 import { CATEGORY_LIST } from '../../constants/categories';
 import { useTheme } from '../../store/themeStore';
 import { CategoryKey } from '../../types';
+import { DomainIcon } from '../common/DomainIcon';
 
 interface CategoryPillsProps {
   activeCategory: CategoryKey;
@@ -62,6 +63,11 @@ export const CategoryPills: React.FC<CategoryPillsProps> = React.memo(({
                 },
               ]}
             >
+              <DomainIcon
+                category={item.key}
+                size={13}
+                color={isActive ? accent : colors.textSecondary}
+              />
               <Text
                 numberOfLines={1}
                 maxFontSizeMultiplier={1.15}
@@ -94,10 +100,11 @@ const styles = StyleSheet.create({
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 9999,
     borderWidth: 1,
+    gap: 6,
   },
   pillText: {
     fontSize: 12.5,
