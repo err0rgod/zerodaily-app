@@ -279,6 +279,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
       useNativeDriver: Platform.OS !== 'web',
     }).start(() => {
       setCurrentIndex(curr + 1);
+      isAnimatingRef.current = false;
     });
   }, [getCardHeight, panY, setCurrentIndex]);
 
@@ -302,6 +303,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
       useNativeDriver: Platform.OS !== 'web',
     }).start(() => {
       setCurrentIndex(curr - 1);
+      isAnimatingRef.current = false;
     });
   }, [getCardHeight, panY, setCurrentIndex, refreshFeed]);
 
@@ -602,6 +604,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
               useNativeDriver: Platform.OS !== 'web',
             }).start(() => {
               setCurrentIndex(curr + 1);
+              isAnimatingRef.current = false;
             });
           } else if (isDownSwipe && curr > 0) {
             isAnimatingRef.current = true;
@@ -612,6 +615,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
               useNativeDriver: Platform.OS !== 'web',
             }).start(() => {
               setCurrentIndex(curr - 1);
+              isAnimatingRef.current = false;
             });
           } else {
             if (isDownSwipe && curr === 0 && gesture.dy > PULL_REFRESH_TRIGGER_PX) {
