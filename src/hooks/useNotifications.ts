@@ -10,6 +10,7 @@ import {
 import { useFeedStore } from '../store/feedStore';
 import { useNotificationStore } from '../store/notificationStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { useUserStore } from '../store/userStore';
 import { Article, CategoryKey, NotificationItem } from '../types';
 
 interface UseNotificationsOptions {
@@ -30,6 +31,7 @@ export function useNotifications(options?: UseNotificationsOptions) {
   const responseListener = useRef<Notifications.Subscription>();
   const receivedListener = useRef<Notifications.Subscription>();
   const lastAlertTimestampRef = useRef<string>(new Date().toISOString());
+  const lastHandledNotificationIdRef = useRef<string | null>(null);
   const isInitializedRef = useRef<boolean>(false);
 
   useEffect(() => {
@@ -96,15 +98,30 @@ export function useNotifications(options?: UseNotificationsOptions) {
         const category = (data?.category || 'cybersec') as CategoryKey;
 
         if (articleId) {
+          // Prevent double firing when both cold-start and runtime listener receive the same event
+          const notifIdentifier =
+            response.notification.request.identifier ||
+            `${articleId}_${response.notification.date}`;
+          if (lastHandledNotificationIdRef.current === notifIdentifier) {
+            return;
+          }
+          lastHandledNotificationIdRef.current = notifIdentifier;
+
           console.log(`[ZeroDaily Notifications] Deep-linking to article: ${articleId} (coldStart: ${isColdStart})`);
 
+          const token = useUserStore.getState().token || undefined;
+
           // Immediately dispatch CTR notification_open beacon and start session tracking
-          trackNotificationEvent({
-            article_id: articleId,
-            category,
-            action: 'notification_open',
-            is_cold_start: isColdStart,
-          }).catch((err) => {
+          trackNotificationEvent(
+            {
+              article_id: articleId,
+              category,
+              action: 'notification_open',
+              is_cold_start: isColdStart,
+              notification_id: notifIdentifier,
+            },
+            token
+          ).catch((err) => {
             console.warn('[ZeroDaily Notifications] Failed to track notification open:', err);
           });
           notificationSessionTracker.startSession(articleId, category);

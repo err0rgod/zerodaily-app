@@ -81,13 +81,13 @@ async function persistHistory(): Promise<void> {
 }
 
 /**
- * Marks an article as read (dwell duration >= 4.0s or full roast modal opened).
+ * Marks an article as read (dwell duration >= 2.0s or full roast modal opened).
  * Synchronously updates the in-memory cache and asynchronously persists to storage.
  */
 export async function markArticleAsRead(
   id: string,
   category: string = 'all',
-  dwellSec: number = 4.0
+  dwellSec: number = 2.0
 ): Promise<void> {
   if (!id) return;
   await ensureLoaded();
@@ -105,7 +105,7 @@ export async function markArticleAsRead(
 }
 
 /**
- * Marks an article as skipped (viewed for < 4.0s).
+ * Marks an article as skipped (viewed for < 2.0s).
  * Will NOT overwrite or downgrade an article that is already marked as 'read'.
  */
 export async function markArticleAsSkipped(

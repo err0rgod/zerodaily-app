@@ -186,7 +186,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
 
       const isAlreadyRead = readingTracker.isArticleRead(prevArticle.id);
 
-      if (elapsedSeconds >= 4.0) {
+      if (elapsedSeconds >= 2.0) {
         readingTracker.markArticleAsRead(
           prevArticle.id,
           prevArticle.category,
@@ -227,7 +227,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
       if (active) {
         const elapsed = (Date.now() - cardStartTimeRef.current) / 1000;
         const isAlreadyRead = readingTracker.isArticleRead(active.id);
-        if (elapsed >= 4.0) {
+        if (elapsed >= 2.0) {
           readingTracker.markArticleAsRead(active.id, active.category, Math.min(elapsed, 120));
           useUserStore.getState().trackEvent(active.id, active.category, 'read', Math.min(elapsed, 120));
         } else if (elapsed >= 0.5 && !isAlreadyRead) {

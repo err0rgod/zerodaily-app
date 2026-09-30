@@ -5,6 +5,7 @@ import { subscribeToTopics, trackNotificationEvent } from '../api/client';
 
 import { CATEGORIES } from '../constants/categories';
 import { useFeedStore } from '../store/feedStore';
+import { useUserStore } from '../store/userStore';
 import { CategoryKey, NotificationItem } from '../types';
 
 export const BREAKING_CHANNEL_ID = 'zerodaily_breaking';
@@ -288,24 +289,29 @@ class NotificationSessionTracker {
     if (!this.activeSession) return;
 
     const { articleId, category, startTime, swipesCount } = this.activeSession;
-    const sessionDurationSeconds = Math.max(
-      0,
-      Math.round(((Date.now() - startTime) / 1000) * 10) / 10
+    const sessionDurationSeconds = Math.min(
+      86400,
+      Math.max(0, Math.round(((Date.now() - startTime) / 1000) * 10) / 10)
     );
 
     // Reset active session immediately to prevent duplicate flushes
     this.activeSession = null;
 
-    trackNotificationEvent({
-      article_id: articleId,
-      category,
-      action: 'notification_session_complete',
-      dwell_seconds: sessionDurationSeconds,
-      swipes_count: swipesCount,
-      trigger_article_id: articleId,
-      session_duration_seconds: sessionDurationSeconds,
-      articles_swiped_count: swipesCount,
-    }).catch((err) => {
+    const token = useUserStore.getState().token || undefined;
+
+    trackNotificationEvent(
+      {
+        article_id: articleId,
+        category,
+        action: 'notification_session_complete',
+        dwell_seconds: sessionDurationSeconds,
+        swipes_count: swipesCount,
+        trigger_article_id: articleId,
+        session_duration_seconds: sessionDurationSeconds,
+        articles_swiped_count: swipesCount,
+      },
+      token
+    ).catch((err) => {
       console.warn('[ZeroDaily NotificationTracker] Failed to flush session end beacon:', err);
     });
   }

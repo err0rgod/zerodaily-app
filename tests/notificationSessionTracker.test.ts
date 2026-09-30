@@ -1,5 +1,6 @@
 import { notificationSessionTracker } from '../src/services/notificationService';
 import * as client from '../src/api/client';
+import { useUserStore } from '../src/store/userStore';
 
 // Mock react-native
 jest.mock('react-native', () => ({
@@ -39,16 +40,16 @@ describe('NotificationSessionTracker CTR & Retention Tracking', () => {
   let trackSpy: jest.SpyInstance;
 
   beforeEach(() => {
+    notificationSessionTracker.endSession();
     jest.clearAllMocks();
     trackSpy = jest.spyOn(client, 'trackNotificationEvent').mockResolvedValue({
       status: 'success',
       message: 'Notification interaction recorded successfully',
     });
-    // Ensure clean state before each test
-    notificationSessionTracker.endSession();
   });
 
   afterEach(() => {
+    notificationSessionTracker.endSession();
     trackSpy.mockRestore();
   });
 
@@ -121,5 +122,17 @@ describe('NotificationSessionTracker CTR & Retention Tracking', () => {
     expect(currentSession?.articleId).toBe('https://example.com/second');
     expect(currentSession?.category).toBe('finance');
     expect(currentSession?.swipesCount).toBe(0);
+  });
+
+  it('dispatches session complete beacon with auth token when user is logged in', () => {
+    useUserStore.setState({ token: 'test_jwt_bearer_token' });
+    notificationSessionTracker.startSession('https://example.com/auth-story', 'cybersec');
+    notificationSessionTracker.endSession();
+
+    expect(trackSpy).toHaveBeenCalledTimes(1);
+    expect(trackSpy.mock.calls[0][1]).toBe('test_jwt_bearer_token');
+
+    // Clean up
+    useUserStore.setState({ token: null });
   });
 });
