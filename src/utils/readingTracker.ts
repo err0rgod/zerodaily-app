@@ -35,18 +35,26 @@ export function ensureLoaded(): Promise<void> {
             : Object.values(parsed);
 
           const now = Date.now();
+          let expiredCount = 0;
           for (const entry of entries) {
             if (
               entry &&
               entry.id &&
-              typeof entry.timestamp === 'number' &&
-              now - entry.timestamp <= HISTORY_RETENTION_MS
+              typeof entry.timestamp === 'number'
             ) {
-              readHistoryCache.set(entry.id, entry);
-              if (entry.status === 'read') {
-                readArticleIds.add(entry.id);
+              if (now - entry.timestamp <= HISTORY_RETENTION_MS) {
+                readHistoryCache.set(entry.id, entry);
+                if (entry.status === 'read') {
+                  readArticleIds.add(entry.id);
+                }
+              } else {
+                expiredCount++;
               }
             }
+          }
+
+          if (expiredCount > 0) {
+            await persistHistory();
           }
         }
       } catch {
@@ -160,7 +168,7 @@ export async function clearOldHistory(maxAgeDays: number = 30): Promise<void> {
   let changed = false;
 
   for (const [id, entry] of readHistoryCache.entries()) {
-    if (now - entry.timestamp > maxAgeMs) {
+    if (now - entry.timestamp >= maxAgeMs) {
       readHistoryCache.delete(id);
       readArticleIds.delete(id);
       changed = true;
@@ -178,7 +186,7 @@ export async function clearOldHistory(maxAgeDays: number = 30): Promise<void> {
 export async function clearAllHistory(): Promise<void> {
   readHistoryCache.clear();
   readArticleIds.clear();
-  loadPromise = Promise.resolve();
+  loadPromise = null;
   try {
     await AsyncStorage.removeItem(READ_HISTORY_STORAGE_KEY);
   } catch {

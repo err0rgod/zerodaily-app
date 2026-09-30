@@ -61,8 +61,7 @@ export const FullRoastModal: React.FC<FullRoastModalProps> = ({
 
   useEffect(() => {
     if (visible && article) {
-      readingTracker.markArticleAsRead(article.id, article.category, 4.0);
-      useUserStore.getState().trackEvent(article.id, article.category, 'full_roast', 4.0);
+      readingTracker.markArticleAsRead(article.id, article.category, 8.0);
     }
   }, [visible, article?.id, article?.category]);
 

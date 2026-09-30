@@ -102,9 +102,9 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     return Math.max(windowDim.height - 110, 400);
   }, [windowDim.height]);
 
-  // Initial feed load if store is empty and not already loading
+  // Initial feed load if store is empty or has only a solitary notification card and not already loading
   useEffect(() => {
-    if (articles.length === 0 && !isLoading) {
+    if (articles.length <= 1 && !isLoading) {
       loadInitialFeed();
     }
   }, [articles.length, isLoading, loadInitialFeed]);
@@ -145,8 +145,11 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     const currentArticle = articles[currentIndex];
     const prevArticle = prevArticleRef.current;
 
+    // Only process dwell/skip transition when actually switching cards
     if (prevArticle && prevArticle.id !== currentArticle?.id) {
       const elapsedSeconds = (Date.now() - cardStartTimeRef.current) / 1000;
+      const isAlreadyRead = readingTracker.isArticleRead(prevArticle.id);
+
       if (elapsedSeconds >= 4.0) {
         readingTracker.markArticleAsRead(
           prevArticle.id,
@@ -159,7 +162,8 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
           'read',
           Math.min(elapsedSeconds, 120)
         );
-      } else if (elapsedSeconds >= 0.5) {
+      } else if (elapsedSeconds >= 0.5 && !isAlreadyRead) {
+        // Never send skip or downgrade an article already consumed (e.g. via Full Roast)
         readingTracker.markArticleAsSkipped(
           prevArticle.id,
           prevArticle.category,
@@ -172,10 +176,15 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
           elapsedSeconds
         );
       }
-    }
 
-    cardStartTimeRef.current = Date.now();
-    prevArticleRef.current = currentArticle || null;
+      // Reset dwell timer for the new incoming card
+      cardStartTimeRef.current = Date.now();
+      prevArticleRef.current = currentArticle || null;
+    } else if (!prevArticle && currentArticle) {
+      // First card mount: start dwell clock
+      cardStartTimeRef.current = Date.now();
+      prevArticleRef.current = currentArticle;
+    }
   }, [currentIndex, category, articles]);
 
   // Flush reading/skip telemetry for the last active card on unmount
@@ -184,10 +193,11 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
       const active = prevArticleRef.current;
       if (active) {
         const elapsed = (Date.now() - cardStartTimeRef.current) / 1000;
+        const isAlreadyRead = readingTracker.isArticleRead(active.id);
         if (elapsed >= 4.0) {
           readingTracker.markArticleAsRead(active.id, active.category, Math.min(elapsed, 120));
           useUserStore.getState().trackEvent(active.id, active.category, 'read', Math.min(elapsed, 120));
-        } else if (elapsed >= 0.5) {
+        } else if (elapsed >= 0.5 && !isAlreadyRead) {
           readingTracker.markArticleAsSkipped(active.id, active.category, elapsed);
           useUserStore.getState().trackEvent(active.id, active.category, 'skip', elapsed);
         }

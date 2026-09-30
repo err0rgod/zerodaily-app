@@ -248,6 +248,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
         isLoading: false,
         isAllCaughtUp: isCaughtUp,
       });
+      await setCachedFeed(category, displayArticles, cursor, hasMore);
       return;
     }
 
@@ -281,7 +282,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
           isLoading: false,
           isAllCaughtUp: isCaughtUp,
         });
-        await setCachedFeed(category, res.data, cursor, hasMore);
+        await setCachedFeed(category, displayArticles, cursor, hasMore);
       } else {
         set({ isLoading: false });
       }
@@ -310,7 +311,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
   loadInitialFeed: async (targetCategory?: CategoryKey) => {
     const category = targetCategory || get().category;
 
-    set({ isLoading: true });
+    set({ isLoading: true, currentIndex: 0 });
     await readingTracker.ensureLoaded();
 
     // 1. Check local disk cache
@@ -344,7 +345,9 @@ export const useFeedStore = create<FeedState>((set, get) => ({
         hasMore,
         isLoading: false,
         isAllCaughtUp: isCaughtUp,
+        currentIndex: 0,
       });
+      await setCachedFeed(category, displayArticles, cursor, hasMore);
       return;
     }
 
@@ -377,8 +380,9 @@ export const useFeedStore = create<FeedState>((set, get) => ({
           hasMore,
           isLoading: false,
           isAllCaughtUp: isCaughtUp,
+          currentIndex: 0,
         });
-        await setCachedFeed(category, res.data, cursor, hasMore);
+        await setCachedFeed(category, displayArticles, cursor, hasMore);
       } else {
         set({ isLoading: false });
       }
@@ -436,7 +440,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
           activeNotificationArticle: null,
           isAllCaughtUp: isCaughtUp,
         });
-        await setCachedFeed(category, res.data, nextCursor, nextHasMore);
+        await setCachedFeed(category, displayArticles, nextCursor, nextHasMore);
       } else {
         set({ isRefreshing: false });
       }
@@ -508,6 +512,12 @@ export const useFeedStore = create<FeedState>((set, get) => ({
       currentIndex: 0,
       isLoading: false,
     });
+
+    // If buffer had no other articles, populate the rest of the swiper in the background
+    // so the user can continue swiping smoothly after the notification card!
+    if (filtered.length === 0) {
+      get().loadInitialFeed(targetCategory);
+    }
   },
 
   clearNotificationArticle: () => {

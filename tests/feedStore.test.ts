@@ -242,5 +242,46 @@ describe('FeedStore 30-Minute Cache TTL & Chronological Consistency', () => {
     expect(state.articles.length).toBe(2);
     expect(state.isAllCaughtUp).toBe(true);
   });
+
+  test('loadInitialFeed resets currentIndex to 0', async () => {
+    useFeedStore.setState({ currentIndex: 4 });
+    await useFeedStore.getState().loadInitialFeed('all');
+    expect(useFeedStore.getState().currentIndex).toBe(0);
+  });
+
+  test('setArticleDirectly triggers background loadInitialFeed when buffer had no prior articles', async () => {
+    const notifArticle: Article = {
+      id: 'https://example.com/single-alert',
+      category: 'ai',
+      heading: 'Single Alert Headline',
+      shortSummary: 'Summary',
+      fullSummary: 'Full summary',
+      published_at: new Date().toISOString(),
+      link: 'https://example.com/single-alert',
+      image_url: '',
+    };
+
+    useFeedStore.setState({ articles: [], activeNotificationArticle: null });
+    useFeedStore.getState().setArticleDirectly(notifArticle);
+
+    // Wait for the async loadInitialFeed to finish
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const state = useFeedStore.getState();
+    expect(state.articles[0].id).toBe(notifArticle.id);
+    expect(state.articles.length).toBeGreaterThan(1);
+  });
+
+  test('loadInitialFeed persists unread displayArticles to cache', async () => {
+    await useFeedStore.getState().loadInitialFeed('all');
+
+    const cachedRaw = mockStorage['@zerodaily_feed_cache_all'];
+    expect(cachedRaw).toBeDefined();
+    const cached = JSON.parse(cachedRaw);
+    expect(cached.data.length).toBe(2);
+    expect(cached.data.map((a: Article) => a.id)).toEqual(
+      expect.arrayContaining([mockApiArticles[0].id, mockApiArticles[1].id])
+    );
+  });
 });
 

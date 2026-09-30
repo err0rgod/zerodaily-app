@@ -143,6 +143,39 @@ describe('ReadingTracker Local-First Storage & Filter Manager', () => {
     expect(isArticleRead(oldEntry.id)).toBe(false); // Pruned on load because > 30 days
   });
 
+  test('clearOldHistory explicitly prunes entries older than maxAgeDays and persists', async () => {
+    await markArticleAsRead(articleA.id, articleA.category, 5.0);
+    expect(isArticleRead(articleA.id)).toBe(true);
+
+    // Prune with maxAgeDays = 0 (everything older than 0 days)
+    await clearOldHistory(0);
+
+    expect(isArticleRead(articleA.id)).toBe(false);
+    const saved = JSON.parse(mockStorage[READ_HISTORY_STORAGE_KEY] || '[]');
+    expect(saved.length).toBe(0);
+  });
+
+  test('clearAllHistory resets loadPromise allowing subsequent ensureLoaded to re-read storage', async () => {
+    await markArticleAsRead(articleA.id, articleA.category, 5.0);
+    expect(isArticleRead(articleA.id)).toBe(true);
+
+    await clearAllHistory();
+    expect(isArticleRead(articleA.id)).toBe(false);
+
+    // Seed mockStorage with fresh entry
+    const newEntry = {
+      id: 'https://example.com/fresh-seed',
+      category: 'ai',
+      status: 'read',
+      dwellSec: 6.0,
+      timestamp: Date.now(),
+    };
+    mockStorage[READ_HISTORY_STORAGE_KEY] = JSON.stringify([newEntry]);
+
+    await ensureLoaded();
+    expect(isArticleRead(newEntry.id)).toBe(true);
+  });
+
   test('readingTracker object exposes all methods cleanly', () => {
     expect(typeof readingTracker.markArticleAsRead).toBe('function');
     expect(typeof readingTracker.markArticleAsSkipped).toBe('function');

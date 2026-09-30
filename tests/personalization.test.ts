@@ -142,5 +142,19 @@ describe('Personalization & Algorithmic Feed Ranking', () => {
     expect(interleaved[3].category).toBe('ai');
     expect(interleaved[4].category).toBe('ai');
   });
+
+  test('calculateArticleScore handles malformed or missing published_at without returning NaN', () => {
+    const invalidArticle: Article = {
+      ...baseArticle,
+      published_at: 'not-a-valid-date',
+    };
+    const score = calculateArticleScore(invalidArticle, mockUser);
+    expect(Number.isNaN(score)).toBe(false);
+    expect(score).toBeGreaterThan(0);
+  });
+
+  test('interleaveArticles handles null or empty input gracefully', () => {
+    expect(rankArticlesForUser([], mockUser, 'ai')).toEqual([]);
+  });
 });
 

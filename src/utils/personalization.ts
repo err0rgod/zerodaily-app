@@ -9,15 +9,20 @@ export const EXPLORATION_RATE = 0.18; // ~18% exploration probability for discov
  * 2. User category affinity multiplier from algo_weights (0.1 to 3.0).
  */
 export function calculateArticleScore(article: Article, user: UserProfile | null): number {
-  const publishedMs = new Date(article.published_at).getTime();
+  if (!article) return 0;
+  const publishedMs = article.published_at ? new Date(article.published_at).getTime() : Date.now();
   const nowMs = Date.now();
-  const ageHours = Math.max(0, (nowMs - publishedMs) / (1000 * 60 * 60));
+  const ageHours = Number.isNaN(publishedMs) ? 0 : Math.max(0, (nowMs - publishedMs) / (1000 * 60 * 60));
 
   // Time decay function: fresh articles receive near 1.0, 24h old receive ~0.5
   const timeDecay = 1.0 / (1.0 + Math.pow(ageHours / 24.0, 1.3));
 
-  // Category engagement affinity multiplier
-  const categoryWeight = user?.algo_weights?.[article.category] ?? 1.0;
+  // Category engagement affinity multiplier (bounded between 0.1 and 3.0)
+  const rawWeight = user?.algo_weights?.[article.category] ?? 1.0;
+  const categoryWeight =
+    typeof rawWeight === 'number' && !Number.isNaN(rawWeight)
+      ? Math.max(0.1, Math.min(3.0, rawWeight))
+      : 1.0;
 
   return timeDecay * categoryWeight;
 }
@@ -33,8 +38,13 @@ export function interleaveArticles(
   user: UserProfile | null,
   options?: { maxConsecutive?: number; explorationRate?: number }
 ): Article[] {
-  if (!articles || articles.length <= 1) {
-    return articles ? [...articles] : [];
+  if (!articles || articles.length === 0) {
+    return [];
+  }
+
+  const validArticles = articles.filter((a) => a && a.id);
+  if (validArticles.length <= 1) {
+    return [...validArticles];
   }
 
   const maxConsecutive = options?.maxConsecutive ?? MAX_CONSECUTIVE_SAME_CATEGORY;
@@ -43,8 +53,8 @@ export function interleaveArticles(
   // 1. Group articles by category with calculated scores
   const categoryQueues = new Map<CategoryKey, { article: Article; score: number }[]>();
 
-  for (const article of articles) {
-    const cat = article.category;
+  for (const article of validArticles) {
+    const cat = (article.category || 'all') as CategoryKey;
     if (!categoryQueues.has(cat)) {
       categoryQueues.set(cat, []);
     }
@@ -146,7 +156,7 @@ export function rankArticlesForUser(
     return [];
   }
 
-  // Single category feed remains pure chronological
+  // Single category feed bypasses interleaving and personalization (source chronological order preserved)
   if (currentCategory !== 'all') {
     return articles;
   }
@@ -156,6 +166,7 @@ export function rankArticlesForUser(
   let filtered = articles;
   if (preferences) {
     filtered = articles.filter((article) => {
+      if (!article || !article.id) return false;
       // If user explicitly unsubscribed from category, exclude from 'all' feed
       return preferences[article.category] !== false;
     });
