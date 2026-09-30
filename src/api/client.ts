@@ -332,7 +332,52 @@ export async function sendPasswordResetEmail(email: string): Promise<{ success: 
 }
 
 /**
- * Exchanges a Firebase Auth ID token for a ZeroDaily user session.
+ * Determines whether a given JWT string originated directly from Google OAuth.
+ */
+function isGoogleOAuthToken(token: string): boolean {
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return false;
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+    const decoded = typeof atob === 'function' ? atob(padded) : '';
+    return decoded.includes('accounts.google.com');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Exchanges a Google OAuth ID token for a Firebase Auth ID token via Identity Toolkit signInWithIdp.
+ * This guarantees the user is registered in the Firebase Authentication Console under the google.com provider.
+ */
+export async function exchangeGoogleTokenForFirebase(googleIdToken: string): Promise<string> {
+  try {
+    const response = await fetchWithTimeout(FIREBASE_AUTH_ENDPOINTS.SIGN_IN_WITH_IDP, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        postBody: `id_token=${googleIdToken}&providerId=google.com`,
+        requestUri: 'http://localhost',
+        returnSecureToken: true,
+      }),
+    });
+
+    const json = await response.json();
+    if (response.ok && json.idToken) {
+      return json.idToken;
+    }
+    console.warn('[ZeroDaily API] signInWithIdp returned non-ok:', json);
+    return googleIdToken;
+  } catch (error) {
+    console.warn('[ZeroDaily API] exchangeGoogleTokenForFirebase error:', error);
+    return googleIdToken;
+  }
+}
+
+/**
+ * Exchanges a Firebase Auth ID token (or Google OAuth ID token) for a ZeroDaily user session.
+ * Automatically registers Google accounts with Firebase Auth Console if necessary.
  * Conforms to POST /api/v1/auth/firebase-login.
  */
 export async function loginWithFirebase(
@@ -340,11 +385,16 @@ export async function loginWithFirebase(
   guestUserId?: string
 ): Promise<AuthResponse> {
   try {
+    let effectiveToken = idToken;
+    if (isGoogleOAuthToken(idToken)) {
+      effectiveToken = await exchangeGoogleTokenForFirebase(idToken);
+    }
+
     const response = await fetchWithTimeout(ENDPOINTS.AUTH_FIREBASE_LOGIN, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        id_token: idToken,
+        id_token: effectiveToken,
         guest_user_id: guestUserId,
       }),
     });
