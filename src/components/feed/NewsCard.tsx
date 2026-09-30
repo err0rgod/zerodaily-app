@@ -94,6 +94,7 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
         {/* 1. Hero Image with Theme-Adaptive Filling, Full Image Display (contain), 1.5s Long-Press Zoom */}
         <TouchableOpacity
           activeOpacity={0.94}
+          onPress={handleOpenFullStory}
           delayLongPress={1500}
           onLongPress={() => {
             if (Platform.OS !== 'web') {
@@ -145,7 +146,6 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
           <TouchableOpacity
             activeOpacity={0.92}
             onPress={handleOpenFullStory}
-            style={styles.headlineAndSummary}
           >
             <Text
               style={[styles.heading, { color: colors.textPrimary }]}
@@ -153,7 +153,9 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
             >
               {article.heading}
             </Text>
+          </TouchableOpacity>
 
+          <View style={styles.headlineAndSummary}>
             <Text
               style={[styles.summary, { color: colors.textSecondary }]}
               numberOfLines={summaryLines}
@@ -162,7 +164,7 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
             >
               {article.shortSummary}
             </Text>
-          </TouchableOpacity>
+          </View>
         </View>
 
         {/* 3. Refined Footer Actions Bar */}

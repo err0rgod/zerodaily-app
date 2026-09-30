@@ -290,7 +290,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
             <View style={styles.aboutFooter}>
               <AlertCircle size={14} color={colors.textMuted} />
               <Text style={[styles.aboutText, { color: colors.textMuted }]}>
-                ZeroDaily Mobile • v1.0.0 • api.zerodaily.in
+                ZeroDaily Mobile • v0.5.4
               </Text>
             </View>
           </ScrollView>

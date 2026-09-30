@@ -134,10 +134,13 @@ export const CategoryOnboardingModal: React.FC<CategoryOnboardingModalProps> = (
     >
       <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
         <View style={styles.container}>
-          {/* Minimal Header */}
+          {/* Enhanced Header */}
           <View style={styles.header}>
             <Text style={[styles.title, { color: colors.textPrimary }]}>
-              Select your interests
+              Personalize your feed
+            </Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+              Select the topics you care about. You can always change these later in settings.
             </Text>
           </View>
 
@@ -256,9 +259,14 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   title: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: '800',
     letterSpacing: -0.5,
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 15,
+    lineHeight: 22,
   },
   scrollView: {
     flex: 1,
