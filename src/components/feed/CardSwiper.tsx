@@ -81,6 +81,14 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
   const containerHeightRef = useRef<number>(containerHeight);
   containerHeightRef.current = containerHeight;
 
+  // Category ref for gesture handlers to avoid stale closures
+  const categoryRef = useRef<CategoryKey>(category);
+  categoryRef.current = category;
+
+  // Window dimension ref for gesture handlers
+  const windowDimRef = useRef(windowDim);
+  windowDimRef.current = windowDim;
+
   const isAnimatingRef = useRef<boolean>(false);
   const panY = useRef(new Animated.Value(0)).current;
   const panX = useRef(new Animated.Value(0)).current;
@@ -118,13 +126,13 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     return () => sub?.remove();
   }, []);
 
-  // Safe height getter that never returns 0
+  // Safe height getter that never returns 0 - uses refs to avoid stale closures
   const getCardHeight = useCallback((): number => {
     if (containerHeightRef.current > 60) {
       return containerHeightRef.current;
     }
-    return Math.max(windowDim.height - 110, 400);
-  }, [windowDim.height]);
+    return Math.max(windowDimRef.current.height - 110, 400);
+  }, []);
 
   // Initial feed load if store is empty or has only a solitary notification card and not already loading
   useEffect(() => {
@@ -230,10 +238,8 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
   useLayoutEffect(() => {
     panY.stopAnimation();
     panY.setValue(0);
-    if (!isAnimatingRef.current) {
-      panX.stopAnimation();
-      panX.setValue(0);
-    }
+    panX.stopAnimation();
+    panX.setValue(0);
     canReleaseRef.current = false;
     setIsPulling(false);
     setCanRelease(false);
@@ -452,6 +458,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
   }, [goToNextCard, goToPrevCard, goToNextDomain, goToPrevDomain]);
 
   // Dual-Axis PanResponder: Vertical = Article Navigation, Horizontal = Domain Switch
+  // Uses refs for dynamic values to avoid stale closures
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
@@ -461,9 +468,10 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
         if (isAnimatingRef.current) return false;
         const dx = Math.abs(gesture.dx);
         const dy = Math.abs(gesture.dy);
-        if (dx < 8 && dy < 8) return false;
-        const isVertical = dy > dx * 0.75 && dy > 10;
-        const isHorizontal = dx > dy * 0.75 && dx > 10;
+        // Higher thresholds to prevent accidental triggers from taps
+        if (dx < 12 && dy < 12) return false;
+        const isVertical = dy > dx * 0.75 && dy > 14;
+        const isHorizontal = dx > dy * 0.75 && dx > 14;
         return isVertical || isHorizontal;
       },
       onMoveShouldSetPanResponderCapture: () => false,
@@ -480,13 +488,13 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
       onPanResponderMove: (_, gesture) => {
         if (isAnimatingRef.current) return;
 
-        // Lock in gesture axis once direction is unambiguous
+        // Lock in gesture axis once direction is unambiguous - higher threshold
         if (gestureAxisRef.current === 'none') {
           const dx = Math.abs(gesture.dx);
           const dy = Math.abs(gesture.dy);
-          if (dx > dy && dx > 6) {
+          if (dx > dy && dx > 10) {
             gestureAxisRef.current = 'horizontal';
-          } else if (dy > dx && dy > 6) {
+          } else if (dy > dx && dy > 10) {
             gestureAxisRef.current = 'vertical';
             setIsPulling(true);
           }
@@ -496,7 +504,9 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
           setReleaseReady(gesture.dy > PULL_REFRESH_TRIGGER_PX);
           panY.setValue(gesture.dy);
         } else if (gestureAxisRef.current === 'horizontal') {
-          const catIndex = CATEGORY_LIST.findIndex((c) => c.key === category);
+          // Use refs to get current values, not stale closures
+          const currentCategory = categoryRef.current;
+          const catIndex = CATEGORY_LIST.findIndex((c) => c.key === currentCategory);
           const atFirst = catIndex === 0;
           const atLast = catIndex === CATEGORY_LIST.length - 1;
 
@@ -508,7 +518,8 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
           panX.setValue(moveX);
 
           // Threshold tactile pulse when crossing the commitment line
-          const threshold = Math.min(windowDim.width * 0.22, 90);
+          const width = windowDimRef.current.width;
+          const threshold = Math.min(width * 0.22, 90);
           const reached =
             Math.abs(moveX) >= threshold && !((atFirst && moveX > 0) || (atLast && moveX < 0));
 
@@ -533,9 +544,11 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
         if (isAnimatingRef.current) return;
 
         if (axis === 'horizontal') {
-          const width = windowDim.width;
+          // Use refs to get current values, not stale closures
+          const width = windowDimRef.current.width;
           const threshold = Math.min(width * 0.22, 90);
-          const catIndex = CATEGORY_LIST.findIndex((c) => c.key === category);
+          const currentCategory = categoryRef.current;
+          const catIndex = CATEGORY_LIST.findIndex((c) => c.key === currentCategory);
 
           const isLeftSwipe = gesture.dx < -threshold || gesture.vx < -0.3;
           const isRightSwipe = gesture.dx > threshold || gesture.vx > 0.3;
