@@ -459,11 +459,14 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
 
   // Dual-Axis PanResponder: Vertical = Article Navigation, Horizontal = Domain Switch
   // Uses refs for dynamic values to avoid stale closures
+  // CRITICAL: Don't claim on start - let TouchableOpacity handle taps. Capture on move for swipes.
   const panResponder = useRef(
     PanResponder.create({
+      // Don't claim on start - allow TouchableOpacity to handle taps
       onStartShouldSetPanResponder: () => false,
       onStartShouldSetPanResponderCapture: () => false,
 
+      // Claim responder on move - this captures the gesture from TouchableOpacity
       onMoveShouldSetPanResponder: (_, gesture) => {
         if (isAnimatingRef.current) return false;
         const dx = Math.abs(gesture.dx);
@@ -474,7 +477,16 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
         const isHorizontal = dx > dy * 0.75 && dx > 14;
         return isVertical || isHorizontal;
       },
-      onMoveShouldSetPanResponderCapture: () => false,
+      // CRITICAL: Use capture phase to steal responder from TouchableOpacity when swiping
+      onMoveShouldSetPanResponderCapture: (_, gesture) => {
+        if (isAnimatingRef.current) return false;
+        const dx = Math.abs(gesture.dx);
+        const dy = Math.abs(gesture.dy);
+        if (dx < 12 && dy < 12) return false;
+        const isVertical = dy > dx * 0.75 && dy > 14;
+        const isHorizontal = dx > dy * 0.75 && dx > 14;
+        return isVertical || isHorizontal;
+      },
 
       onPanResponderGrant: () => {
         panY.stopAnimation();
@@ -488,10 +500,11 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
       onPanResponderMove: (_, gesture) => {
         if (isAnimatingRef.current) return;
 
-        // Lock in gesture axis once direction is unambiguous - higher threshold
+        // Lock in gesture axis once direction is unambiguous
         if (gestureAxisRef.current === 'none') {
           const dx = Math.abs(gesture.dx);
           const dy = Math.abs(gesture.dy);
+          // Higher thresholds to distinguish from taps
           if (dx > dy && dx > 10) {
             gestureAxisRef.current = 'horizontal';
           } else if (dy > dx && dy > 10) {
