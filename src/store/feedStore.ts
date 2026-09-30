@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { fetchFeed } from '../api/client';
 import { Article, CategoryKey } from '../types';
 import { rankArticlesForUser } from '../utils/personalization';
+import { readingTracker } from '../utils/readingTracker';
 import { useUserStore } from './userStore';
 
 const STORAGE_CACHE_KEY_PREFIX = '@zerodaily_feed_cache_';
@@ -10,6 +11,8 @@ const PREFETCH_THRESHOLD = 8; // Fetch next batch when remaining cards <= 8
 export const CACHE_TTL_MS = 15 * 60 * 1000; // 15-minute offline cache TTL
 /** How long a refresh may stay in flight before the spinner is force-cleared. */
 const REFRESH_TIMEOUT_MS = 20 * 1000;
+const MIN_UNREAD_BUFFER_SIZE = 10;
+const MAX_AUTO_FILL_PAGES = 3;
 
 export interface FeedCachePayload {
   timestamp: number;
@@ -27,6 +30,7 @@ interface FeedState {
   isLoading: boolean;
   isRefreshing: boolean;
   isPrefetching: boolean;
+  isAllCaughtUp: boolean;
   activeNotificationArticle: Article | null;
 
   // Actions
@@ -41,7 +45,7 @@ interface FeedState {
 
 /**
  * Reads cached feed from local storage with backward compatibility.
- * Returns payload and whether the cache is still fresh (< 30 minutes old).
+ * Returns payload and whether the cache is still fresh (< 15 minutes old).
  */
 async function getCachedFeed(category: CategoryKey): Promise<{ payload: FeedCachePayload | null; isFresh: boolean }> {
   try {
@@ -82,7 +86,7 @@ async function getCachedFeed(category: CategoryKey): Promise<{ payload: FeedCach
 }
 
 /**
- * Saves feed to local storage with timestamp for 30-minute TTL validation.
+ * Saves feed to local storage with timestamp for 15-minute TTL validation.
  */
 async function setCachedFeed(
   category: CategoryKey,
@@ -118,7 +122,7 @@ function mergeWithNotification(articles: Article[], notifArticle: Article | null
 }
 
 /**
- * Fisher-Yates array shuffle.
+ * Fisher-Yates array shuffle (exported for testing backward compatibility).
  */
 export function shuffleArray<T>(items: T[]): T[] {
   const result = [...items];
@@ -132,13 +136,55 @@ export function shuffleArray<T>(items: T[]): T[] {
 }
 
 /**
- * Applies user algorithmic affinity weights and topic preferences, shuffles, then merges notification article.
+ * Applies user algorithmic affinity weights and topic preferences via Weighted Diverse Interleaving,
+ * then merges notification article. (No random shuffling to preserve personalization scores).
  */
 function personalizeAndMerge(articles: Article[], notifArticle: Article | null, currentCategory: CategoryKey): Article[] {
   const user = useUserStore.getState().user;
   const personalized = rankArticlesForUser(articles, user, currentCategory);
-  const shuffled = shuffleArray(personalized);
-  return mergeWithNotification(shuffled, notifArticle, currentCategory);
+  return mergeWithNotification(personalized, notifArticle, currentCategory);
+}
+
+/**
+ * Silently fills the feed buffer with unread articles in the background
+ * using the pagination cursor until buffer reaches the minimum threshold.
+ */
+async function autoFillArticles(
+  category: CategoryKey,
+  existingArticles: Article[],
+  startCursor: string | null,
+  startHasMore: boolean
+): Promise<{ articles: Article[]; cursor: string | null; hasMore: boolean }> {
+  let accumulated = [...existingArticles];
+  const seenIds = new Set(accumulated.map((a) => a.id));
+  let cursor = startCursor;
+  let hasMore = startHasMore;
+  let pagesFetched = 0;
+
+  while (accumulated.length < MIN_UNREAD_BUFFER_SIZE && hasMore && cursor && pagesFetched < MAX_AUTO_FILL_PAGES) {
+    try {
+      pagesFetched++;
+      const nextBatch = await fetchFeed(category, cursor);
+      if (!nextBatch.data || nextBatch.data.length === 0) {
+        hasMore = false;
+        break;
+      }
+      cursor = nextBatch.pagination?.next_cursor ?? null;
+      hasMore = nextBatch.pagination?.has_more ?? false;
+
+      const unread = readingTracker.filterUnreadArticles(nextBatch.data);
+      for (const a of unread) {
+        if (!seenIds.has(a.id)) {
+          seenIds.add(a.id);
+          accumulated.push(a);
+        }
+      }
+    } catch {
+      break;
+    }
+  }
+
+  return { articles: accumulated, cursor, hasMore };
 }
 
 export const useFeedStore = create<FeedState>((set, get) => ({
@@ -150,6 +196,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
   isLoading: false,
   isRefreshing: false,
   isPrefetching: false,
+  isAllCaughtUp: false,
   activeNotificationArticle: null,
 
   setCategory: async (category: CategoryKey) => {
@@ -166,36 +213,75 @@ export const useFeedStore = create<FeedState>((set, get) => ({
       isLoading: true,
       cursor: null,
       hasMore: true,
+      isAllCaughtUp: false,
       activeNotificationArticle: activeNotif,
     });
 
-    // 1. If cache is fresh (< 30 minutes old), restore from disk cache
+    await readingTracker.ensureLoaded();
+
+    // 1. If cache is fresh (< 15 minutes old), restore from disk cache
     const { payload, isFresh } = await getCachedFeed(category);
     if (isFresh && payload && payload.data.length > 0) {
       const notif = get().activeNotificationArticle;
-      const displayArticles = personalizeAndMerge(payload.data, notif, category);
+      let unread = readingTracker.filterUnreadArticles(payload.data);
+      let cursor = payload.cursor ?? null;
+      let hasMore = payload.hasMore ?? true;
+      let isCaughtUp = false;
+
+      if (unread.length < MIN_UNREAD_BUFFER_SIZE && hasMore && cursor) {
+        const filled = await autoFillArticles(category, unread, cursor, hasMore);
+        unread = filled.articles;
+        cursor = filled.cursor;
+        hasMore = filled.hasMore;
+      }
+
+      if (unread.length === 0) {
+        unread = payload.data;
+        isCaughtUp = true;
+      }
+
+      const displayArticles = personalizeAndMerge(unread, notif, category);
       set({
         articles: displayArticles,
-        cursor: payload.cursor,
-        hasMore: payload.hasMore ?? true,
+        cursor,
+        hasMore,
         isLoading: false,
+        isAllCaughtUp: isCaughtUp,
       });
       return;
     }
 
-    // 2. Cache is older than 30 minutes (or empty) -> ignore disk cache, fetch fresh from web
+    // 2. Cache is older than 15 minutes (or empty) -> fetch fresh from web
     try {
       const res = await fetchFeed(category);
       if (res.data && res.data.length > 0) {
         const notif = get().activeNotificationArticle;
-        const displayArticles = personalizeAndMerge(res.data, notif, category);
+        let unread = readingTracker.filterUnreadArticles(res.data);
+        let cursor = res.pagination.next_cursor;
+        let hasMore = res.pagination.has_more;
+        let isCaughtUp = false;
+
+        if (unread.length < MIN_UNREAD_BUFFER_SIZE && hasMore && cursor) {
+          const filled = await autoFillArticles(category, unread, cursor, hasMore);
+          unread = filled.articles;
+          cursor = filled.cursor;
+          hasMore = filled.hasMore;
+        }
+
+        if (unread.length === 0) {
+          unread = res.data;
+          isCaughtUp = true;
+        }
+
+        const displayArticles = personalizeAndMerge(unread, notif, category);
         set({
           articles: displayArticles,
-          cursor: res.pagination.next_cursor,
-          hasMore: res.pagination.has_more,
+          cursor,
+          hasMore,
           isLoading: false,
+          isAllCaughtUp: isCaughtUp,
         });
-        await setCachedFeed(category, res.data, res.pagination.next_cursor, res.pagination.has_more);
+        await setCachedFeed(category, res.data, cursor, hasMore);
       } else {
         set({ isLoading: false });
       }
@@ -225,35 +311,74 @@ export const useFeedStore = create<FeedState>((set, get) => ({
     const category = targetCategory || get().category;
 
     set({ isLoading: true });
+    await readingTracker.ensureLoaded();
 
     // 1. Check local disk cache
     const { payload, isFresh } = await getCachedFeed(category);
     if (isFresh && payload && payload.data.length > 0) {
-      // Fresh cache (< 30 minutes) -> display immediately for 0ms cold boot
+      // Fresh cache (< 15 minutes) -> display immediately for 0ms cold boot
       const notif = get().activeNotificationArticle;
-      const displayArticles = personalizeAndMerge(payload.data, notif, category);
+      let unread = readingTracker.filterUnreadArticles(payload.data);
+      let cursor = payload.cursor ?? null;
+      let hasMore = payload.hasMore ?? true;
+      let isCaughtUp = false;
+
+      // Auto-fill buffer if unread cards are below threshold
+      if (unread.length < MIN_UNREAD_BUFFER_SIZE && hasMore && cursor) {
+        const filled = await autoFillArticles(category, unread, cursor, hasMore);
+        unread = filled.articles;
+        cursor = filled.cursor;
+        hasMore = filled.hasMore;
+      }
+
+      // "All Caught Up" Graceful Fallback: if all stories read, show recent
+      if (unread.length === 0) {
+        unread = payload.data;
+        isCaughtUp = true;
+      }
+
+      const displayArticles = personalizeAndMerge(unread, notif, category);
       set({
         articles: displayArticles,
-        cursor: payload.cursor,
-        hasMore: payload.hasMore ?? true,
+        cursor,
+        hasMore,
         isLoading: false,
+        isAllCaughtUp: isCaughtUp,
       });
       return;
     }
 
-    // 2. Cache is older than 30 minutes (or empty) -> ignore disk cache, fetch fresh from web
+    // 2. Cache is older than 15 minutes (or empty) -> fetch fresh from web
     try {
       const res = await fetchFeed(category);
       if (res.data && res.data.length > 0) {
         const notif = get().activeNotificationArticle;
-        const displayArticles = personalizeAndMerge(res.data, notif, category);
+        let unread = readingTracker.filterUnreadArticles(res.data);
+        let cursor = res.pagination.next_cursor;
+        let hasMore = res.pagination.has_more;
+        let isCaughtUp = false;
+
+        if (unread.length < MIN_UNREAD_BUFFER_SIZE && hasMore && cursor) {
+          const filled = await autoFillArticles(category, unread, cursor, hasMore);
+          unread = filled.articles;
+          cursor = filled.cursor;
+          hasMore = filled.hasMore;
+        }
+
+        if (unread.length === 0) {
+          unread = res.data;
+          isCaughtUp = true;
+        }
+
+        const displayArticles = personalizeAndMerge(unread, notif, category);
         set({
           articles: displayArticles,
-          cursor: res.pagination.next_cursor,
-          hasMore: res.pagination.has_more,
+          cursor,
+          hasMore,
           isLoading: false,
+          isAllCaughtUp: isCaughtUp,
         });
-        await setCachedFeed(category, res.data, res.pagination.next_cursor, res.pagination.has_more);
+        await setCachedFeed(category, res.data, cursor, hasMore);
       } else {
         set({ isLoading: false });
       }
@@ -269,10 +394,8 @@ export const useFeedStore = create<FeedState>((set, get) => ({
 
     const { category, cursor } = get();
     set({ isRefreshing: true });
+    await readingTracker.ensureLoaded();
 
-    // Backstop for a request that never settles. Every other path clears the
-    // flag, so this only fires on a genuine hang and stops the spinner from
-    // staying up indefinitely.
     let settled = false;
     const hangGuard = setTimeout(() => {
       if (!settled) set({ isRefreshing: false });
@@ -286,16 +409,34 @@ export const useFeedStore = create<FeedState>((set, get) => ({
       }
 
       if (res.data && res.data.length > 0) {
-        const displayArticles = personalizeAndMerge(res.data, null, category);
+        let unread = readingTracker.filterUnreadArticles(res.data);
+        let nextCursor = res.pagination?.next_cursor || null;
+        let nextHasMore = res.pagination?.has_more ?? true;
+        let isCaughtUp = false;
+
+        if (unread.length < MIN_UNREAD_BUFFER_SIZE && nextHasMore && nextCursor) {
+          const filled = await autoFillArticles(category, unread, nextCursor, nextHasMore);
+          unread = filled.articles;
+          nextCursor = filled.cursor;
+          nextHasMore = filled.hasMore;
+        }
+
+        if (unread.length === 0) {
+          unread = res.data;
+          isCaughtUp = true;
+        }
+
+        const displayArticles = personalizeAndMerge(unread, null, category);
         set({
           articles: displayArticles,
           currentIndex: 0,
-          cursor: res.pagination?.next_cursor || null,
-          hasMore: res.pagination?.has_more ?? true,
+          cursor: nextCursor,
+          hasMore: nextHasMore,
           isRefreshing: false,
           activeNotificationArticle: null,
+          isAllCaughtUp: isCaughtUp,
         });
-        await setCachedFeed(category, res.data, res.pagination?.next_cursor, res.pagination?.has_more);
+        await setCachedFeed(category, res.data, nextCursor, nextHasMore);
       } else {
         set({ isRefreshing: false });
       }
@@ -313,27 +454,36 @@ export const useFeedStore = create<FeedState>((set, get) => ({
     if (!hasMore || isPrefetching || !cursor) return;
 
     set({ isPrefetching: true });
+    await readingTracker.ensureLoaded();
 
     try {
       const res = await fetchFeed(category, cursor);
       if (res.data && res.data.length > 0) {
-        // Deduplicate incoming articles by ID
         const existingIds = new Set(articles.map((a) => a.id));
-        const fresh = res.data.filter((a) => !existingIds.has(a.id));
+        const unread = readingTracker.filterUnreadArticles(res.data);
+        let fresh = unread.filter((a) => !existingIds.has(a.id));
+        let nextCursor = res.pagination.next_cursor;
+        let nextHasMore = res.pagination.has_more;
+
+        if (fresh.length < 8 && nextHasMore && nextCursor) {
+          const filled = await autoFillArticles(category, fresh, nextCursor, nextHasMore);
+          fresh = filled.articles.filter((a) => !existingIds.has(a.id));
+          nextCursor = filled.cursor;
+          nextHasMore = filled.hasMore;
+        }
+
         const user = useUserStore.getState().user;
         const personalizedFresh = rankArticlesForUser(fresh, user, category);
-        const shuffledFresh = shuffleArray(personalizedFresh);
 
-        const updated = [...articles, ...shuffledFresh];
+        const updated = [...articles, ...personalizedFresh];
         set({
           articles: updated,
-          cursor: res.pagination.next_cursor,
-          hasMore: res.pagination.has_more,
+          cursor: nextCursor,
+          hasMore: nextHasMore,
           isPrefetching: false,
         });
 
-        // Update local disk cache with updated batch
-        await setCachedFeed(category, updated, res.pagination.next_cursor, res.pagination.has_more);
+        await setCachedFeed(category, updated, nextCursor, nextHasMore);
       } else {
         set({ hasMore: false, isPrefetching: false });
       }

@@ -1,5 +1,6 @@
 import { ENDPOINTS } from '../src/api/endpoints';
 import { CACHE_TTL_MS, shuffleArray, useFeedStore } from '../src/store/feedStore';
+import { readingTracker } from '../src/utils/readingTracker';
 import { Article } from '../src/types';
 
 // Mock AsyncStorage
@@ -59,8 +60,9 @@ describe('Endpoints & Single Article Routing Contract', () => {
 });
 
 describe('FeedStore 30-Minute Cache TTL & Chronological Consistency', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     for (const k in mockStorage) delete mockStorage[k];
+    await readingTracker.clearAllHistory();
     useFeedStore.setState({
       category: 'all',
       articles: [],
@@ -70,6 +72,7 @@ describe('FeedStore 30-Minute Cache TTL & Chronological Consistency', () => {
       isLoading: false,
       isRefreshing: false,
       isPrefetching: false,
+      isAllCaughtUp: false,
       activeNotificationArticle: null,
     });
   });
@@ -213,4 +216,31 @@ describe('FeedStore 30-Minute Cache TTL & Chronological Consistency', () => {
     // Fresh cache restored immediately
     expect(state.articles[0].id).toBe('https://example.com/fresh-cached-story');
   });
+
+  test('loadInitialFeed filters out articles already marked as read', async () => {
+    // Mark first mock article as read
+    await readingTracker.markArticleAsRead(mockApiArticles[0].id, mockApiArticles[0].category, 5.0);
+
+    await useFeedStore.getState().loadInitialFeed('all');
+
+    const state = useFeedStore.getState();
+    // Only the second mock article should be in the active feed
+    expect(state.articles.length).toBe(1);
+    expect(state.articles[0].id).toBe(mockApiArticles[1].id);
+    expect(state.isAllCaughtUp).toBe(false);
+  });
+
+  test('All Caught Up Fallback: when all available articles are read, displays recent stories with isAllCaughtUp flag', async () => {
+    // Mark both mock articles as read
+    await readingTracker.markArticleAsRead(mockApiArticles[0].id, mockApiArticles[0].category, 5.0);
+    await readingTracker.markArticleAsRead(mockApiArticles[1].id, mockApiArticles[1].category, 5.0);
+
+    await useFeedStore.getState().loadInitialFeed('all');
+
+    const state = useFeedStore.getState();
+    // Feed must not be empty!
+    expect(state.articles.length).toBe(2);
+    expect(state.isAllCaughtUp).toBe(true);
+  });
 });
+

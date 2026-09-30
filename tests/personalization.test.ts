@@ -100,4 +100,47 @@ describe('Personalization & Algorithmic Feed Ranking', () => {
     expect(rankArticlesForUser([], mockUser, 'all')).toEqual([]);
     expect(rankArticlesForUser([baseArticle], null, 'all')).toEqual([baseArticle]);
   });
+
+  test('Anti-Clumping Rule: does not serve consecutive cards from same category when alternatives exist', () => {
+    // 3 AI articles and 3 cybersec articles
+    const ai1: Article = { ...baseArticle, id: 'ai-1', heading: 'AI 1' };
+    const ai2: Article = { ...baseArticle, id: 'ai-2', heading: 'AI 2' };
+    const ai3: Article = { ...baseArticle, id: 'ai-3', heading: 'AI 3' };
+
+    const cyber1: Article = { ...oldCybersecArticle, id: 'cy-1', heading: 'Cyber 1' };
+    const cyber2: Article = { ...oldCybersecArticle, id: 'cy-2', heading: 'Cyber 2' };
+    const cyber3: Article = { ...oldCybersecArticle, id: 'cy-3', heading: 'Cyber 3' };
+
+    const pool = [ai1, ai2, ai3, cyber1, cyber2, cyber3];
+    const interleaved = rankArticlesForUser(pool, mockUser, 'all');
+
+    expect(interleaved.length).toBe(6);
+
+    // Verify no two adjacent items share the same category when both are active
+    for (let i = 0; i < interleaved.length - 1; i++) {
+      expect(interleaved[i].category).not.toBe(interleaved[i + 1].category);
+    }
+  });
+
+  test('Anti-Clumping Rule: gracefully relaxes when only one category has remaining articles', () => {
+    // 4 AI articles and 1 cybersec article
+    const ai1: Article = { ...baseArticle, id: 'ai-1' };
+    const ai2: Article = { ...baseArticle, id: 'ai-2' };
+    const ai3: Article = { ...baseArticle, id: 'ai-3' };
+    const ai4: Article = { ...baseArticle, id: 'ai-4' };
+    const cyber1: Article = { ...oldCybersecArticle, id: 'cy-1' };
+
+    const pool = [ai1, ai2, ai3, ai4, cyber1];
+    const interleaved = rankArticlesForUser(pool, mockUser, 'all');
+
+    expect(interleaved.length).toBe(5);
+    // First two must alternate
+    expect(interleaved[0].category).toBe('ai');
+    expect(interleaved[1].category).toBe('cybersec');
+    // Once cybersec is exhausted, remaining 3 AI articles are served without crashing
+    expect(interleaved[2].category).toBe('ai');
+    expect(interleaved[3].category).toBe('ai');
+    expect(interleaved[4].category).toBe('ai');
+  });
 });
+

@@ -15,8 +15,10 @@ import {
 import { CATEGORIES, getDynamicFallbackImage } from '../../constants/categories';
 import { useBookmarkStore } from '../../store/bookmarkStore';
 import { useTheme } from '../../store/themeStore';
+import { useUserStore } from '../../store/userStore';
 import { Article } from '../../types';
 import { formatRelativeTime } from '../../utils/date';
+import { readingTracker } from '../../utils/readingTracker';
 import { shareArticle } from '../../utils/share';
 import { extractDomain } from '../../utils/url';
 import { Badge } from '../common/Badge';
@@ -56,6 +58,13 @@ export const FullRoastModal: React.FC<FullRoastModalProps> = ({
   useEffect(() => {
     setHasLoadError(false);
   }, [article?.id, article?.image_url]);
+
+  useEffect(() => {
+    if (visible && article) {
+      readingTracker.markArticleAsRead(article.id, article.category, 4.0);
+      useUserStore.getState().trackEvent(article.id, article.category, 'full_roast', 4.0);
+    }
+  }, [visible, article?.id, article?.category]);
 
   if (!article) return null;
 

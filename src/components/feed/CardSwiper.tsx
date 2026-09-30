@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { RotateCcw } from 'lucide-react-native';
+import { Check, RotateCcw } from 'lucide-react-native';
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -19,6 +19,7 @@ import { useFeedStore } from '../../store/feedStore';
 import { useTheme } from '../../store/themeStore';
 import { useUserStore } from '../../store/userStore';
 import { Article, CategoryKey } from '../../types';
+import { readingTracker } from '../../utils/readingTracker';
 import { NewsCard } from './NewsCard';
 import { ScreenGlareLoader } from './ScreenGlareLoader';
 
@@ -45,6 +46,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     isRefreshing,
     loadInitialFeed,
     isLoading,
+    isAllCaughtUp,
   } = useFeedStore();
 
   const { colors, isDark } = useTheme();
@@ -145,14 +147,24 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
 
     if (prevArticle && prevArticle.id !== currentArticle?.id) {
       const elapsedSeconds = (Date.now() - cardStartTimeRef.current) / 1000;
-      if (elapsedSeconds >= 2.0) {
+      if (elapsedSeconds >= 4.0) {
+        readingTracker.markArticleAsRead(
+          prevArticle.id,
+          prevArticle.category,
+          Math.min(elapsedSeconds, 120)
+        );
         useUserStore.getState().trackEvent(
           prevArticle.id,
           prevArticle.category,
           'read',
           Math.min(elapsedSeconds, 120)
         );
-      } else if (elapsedSeconds >= 0.4) {
+      } else if (elapsedSeconds >= 0.5) {
+        readingTracker.markArticleAsSkipped(
+          prevArticle.id,
+          prevArticle.category,
+          elapsedSeconds
+        );
         useUserStore.getState().trackEvent(
           prevArticle.id,
           prevArticle.category,
@@ -165,6 +177,23 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     cardStartTimeRef.current = Date.now();
     prevArticleRef.current = currentArticle || null;
   }, [currentIndex, category, articles]);
+
+  // Flush reading/skip telemetry for the last active card on unmount
+  useEffect(() => {
+    return () => {
+      const active = prevArticleRef.current;
+      if (active) {
+        const elapsed = (Date.now() - cardStartTimeRef.current) / 1000;
+        if (elapsed >= 4.0) {
+          readingTracker.markArticleAsRead(active.id, active.category, Math.min(elapsed, 120));
+          useUserStore.getState().trackEvent(active.id, active.category, 'read', Math.min(elapsed, 120));
+        } else if (elapsed >= 0.5) {
+          readingTracker.markArticleAsSkipped(active.id, active.category, elapsed);
+          useUserStore.getState().trackEvent(active.id, active.category, 'skip', elapsed);
+        }
+      }
+    };
+  }, []);
 
   // Reset animation position synchronously before paint whenever index or category changes
   useLayoutEffect(() => {
@@ -522,6 +551,21 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
           </View>
         )}
 
+        {/* All caught up banner */}
+        {isAllCaughtUp && !isRefreshing && !isPulling && (
+          <View
+            style={[
+              styles.caughtUpBadge,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <Check size={12} color={colors.primary} />
+            <Text style={[styles.caughtUpText, { color: colors.textSecondary }]}>
+              You're all caught up! Showing recent stories
+            </Text>
+          </View>
+        )}
+
         {/* PERSISTENT 3-SLOT DECK: Pre-mounts incoming cards so images never blink across slides */}
         {orderedSlots.map((slotIndex) => {
           const article = getSlotArticle(slotIndex);
@@ -633,6 +677,27 @@ const styles = StyleSheet.create({
   },
   refreshingBadge: {
     transform: [{ translateY: 12 }],
+  },
+  caughtUpBadge: {
+    position: 'absolute',
+    top: 8,
+    alignSelf: 'center',
+    zIndex: 90,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 9999,
+    borderWidth: 1,
+    gap: 6,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  caughtUpText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   pullRefreshText: {
     fontSize: 11.5,
