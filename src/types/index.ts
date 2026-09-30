@@ -91,6 +91,46 @@ export interface NotificationHistoryResponse {
   count: number;
 }
 
+/** Notification interaction tracking event payload */
+export interface NotificationTrackingPayload {
+  article_id: string;
+  category: string;
+  action: 'notification_open' | 'notification_session_complete';
+  notification_id?: string;
+  dwell_seconds?: number;
+  swipes_count?: number;
+  is_cold_start?: boolean;
+  trigger_article_id?: string;
+  session_duration_seconds?: number;
+  articles_swiped_count?: number;
+}
+
+/** Notification tracking response envelope */
+export interface NotificationTrackingResponse {
+  status: 'success' | 'error';
+  message: string;
+}
+
+/** Notification analytics item matching GET /api/v1/notifications/analytics */
+export interface NotificationAnalyticsItem {
+  article_id: string;
+  heading: string;
+  category: string;
+  opens_count: number;
+  total_sessions: number;
+  avg_dwell_seconds: number;
+  avg_swipes_count: number;
+  last_opened_at?: string | null;
+}
+
+/** Notification analytics response envelope */
+export interface NotificationAnalyticsResponse {
+  status: 'success' | 'error';
+  data: NotificationAnalyticsItem[];
+  count: number;
+}
+
+
 /** Incoming FCM push notification data payload */
 export interface FCMDataPayload {
   article_id: string;

@@ -28,6 +28,13 @@ export const ENDPOINTS = {
   /** POST /api/v1/notifications/unsubscribe */
   NOTIFICATIONS_UNSUBSCRIBE: `${API_BASE_URL}/api/v1/notifications/unsubscribe`,
 
+  /** POST /api/v1/notifications/track */
+  NOTIFICATIONS_TRACK: `${API_BASE_URL}/api/v1/notifications/track`,
+
+  /** GET /api/v1/notifications/analytics */
+  NOTIFICATIONS_ANALYTICS: `${API_BASE_URL}/api/v1/notifications/analytics`,
+
+
   /** GET /health */
   HEALTH: `${API_BASE_URL}/health`,
 

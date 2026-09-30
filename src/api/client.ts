@@ -5,12 +5,15 @@ import {
   CategoryKey,
   FeedResponse,
   NotificationHistoryResponse,
+  NotificationTrackingPayload,
+  NotificationTrackingResponse,
   SingleArticleResponse,
   SyncBookmarksResponse,
   TrackingEventPayload,
   TrackingResponse,
   UserProfile,
 } from '../types';
+
 import { ENDPOINTS, FIREBASE_AUTH_ENDPOINTS } from './endpoints';
 
 const REQUEST_TIMEOUT_MS = 6000;
@@ -166,6 +169,38 @@ export async function unsubscribeFromTopics(token: string, topics: string[]): Pr
     return false;
   }
 }
+
+/**
+ * Tracks a push notification interaction (CTR open or session complete).
+ * Conforms to POST /api/v1/notifications/track.
+ */
+export async function trackNotificationEvent(
+  payload: NotificationTrackingPayload,
+  token?: string
+): Promise<NotificationTrackingResponse | null> {
+  try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetchWithTimeout(ENDPOINTS.NOTIFICATIONS_TRACK, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) return null;
+    const json: NotificationTrackingResponse = await response.json();
+    return json;
+  } catch (error) {
+    console.warn('[ZeroDaily API] trackNotificationEvent failed:', error);
+    return null;
+  }
+}
+
 
 /**
  * Register a permanent user account using Firebase Auth.

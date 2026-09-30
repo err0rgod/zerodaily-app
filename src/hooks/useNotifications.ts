@@ -1,8 +1,9 @@
 import * as Notifications from 'expo-notifications';
 import { useEffect, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-import { fetchArticleById, fetchNotificationHistory } from '../api/client';
+import { fetchArticleById, fetchNotificationHistory, trackNotificationEvent } from '../api/client';
 import {
+  notificationSessionTracker,
   registerForPushNotificationsAsync,
   setupNotificationChannel,
 } from '../services/notificationService';
@@ -84,14 +85,30 @@ export function useNotifications(options?: UseNotificationsOptions) {
     }
 
     // 4. Notification Response Handler (User Tapped Notification Banner)
-    const handleNotificationTap = async (response: Notifications.NotificationResponse) => {
+    const handleNotificationTap = async (
+      response: Notifications.NotificationResponse,
+      isColdStart: boolean = false
+    ) => {
       try {
         const content = response.notification.request.content;
         const data = content.data;
         const articleId = (data?.article_id || '') as string;
+        const category = (data?.category || 'cybersec') as CategoryKey;
 
         if (articleId) {
-          console.log(`[ZeroDaily Notifications] Deep-linking to article: ${articleId}`);
+          console.log(`[ZeroDaily Notifications] Deep-linking to article: ${articleId} (coldStart: ${isColdStart})`);
+
+          // Immediately dispatch CTR notification_open beacon and start session tracking
+          trackNotificationEvent({
+            article_id: articleId,
+            category,
+            action: 'notification_open',
+            is_cold_start: isColdStart,
+          }).catch((err) => {
+            console.warn('[ZeroDaily Notifications] Failed to track notification open:', err);
+          });
+          notificationSessionTracker.startSession(articleId, category);
+
           await useNotificationStore.getState().markAsRead(articleId);
 
           // 1. Instant local feed search
@@ -106,7 +123,6 @@ export function useNotifications(options?: UseNotificationsOptions) {
 
             const heading = (data?.heading as string) || (isGeneric && rawBody ? rawBody : rawTitle) || 'Breaking News';
             const punchline = (data?.push_punchline as string) || (isGeneric ? '' : rawBody) || heading;
-            const category = (data?.category || 'cybersec') as CategoryKey;
             const imageUrl = (data?.image_url as string) || '';
             const link = (data?.link as string) || (articleId.startsWith('http') ? articleId : 'https://zerodaily.in');
 
@@ -146,19 +162,22 @@ export function useNotifications(options?: UseNotificationsOptions) {
 
     try {
       // Background / Foreground tap listener
-      responseListener.current = Notifications.addNotificationResponseReceivedListener(handleNotificationTap);
+      responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
+        handleNotificationTap(response, false);
+      });
 
       // Cold start tap listener (app was killed when notification was tapped)
       Notifications.getLastNotificationResponseAsync()
         .then((response) => {
           if (response) {
-            handleNotificationTap(response);
+            handleNotificationTap(response, true);
           }
         })
         .catch(() => {});
     } catch (err) {
       console.warn('[ZeroDaily Notifications] Failed to register response listener:', err);
     }
+
 
     // 5. Periodic & AppState Resume Breaking News Checker
     const checkBreakingAlerts = async () => {

@@ -20,8 +20,10 @@ import { useTheme } from '../../store/themeStore';
 import { useUserStore } from '../../store/userStore';
 import { Article, CategoryKey, CategoryMeta } from '../../types';
 import { readingTracker } from '../../utils/readingTracker';
+import { notificationSessionTracker } from '../../services/notificationService';
 import { NewsCard } from './NewsCard';
 import { ScreenGlareLoader } from './ScreenGlareLoader';
+
 import { DomainIcon } from '../common/DomainIcon';
 
 interface CardSwiperProps {
@@ -179,7 +181,9 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
 
     // Only process dwell/skip transition when actually switching cards
     if (prevArticle && prevArticle.id !== currentArticle?.id) {
+      notificationSessionTracker.recordSwipe();
       const elapsedSeconds = (Date.now() - cardStartTimeRef.current) / 1000;
+
       const isAlreadyRead = readingTracker.isArticleRead(prevArticle.id);
 
       if (elapsedSeconds >= 4.0) {

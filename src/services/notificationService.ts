@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
-import { subscribeToTopics } from '../api/client';
+import { AppState, AppStateStatus, Platform } from 'react-native';
+import { subscribeToTopics, trackNotificationEvent } from '../api/client';
+
 import { CATEGORIES } from '../constants/categories';
 import { useFeedStore } from '../store/feedStore';
 import { CategoryKey, NotificationItem } from '../types';
@@ -240,3 +241,89 @@ export async function scheduleTestBreakingAlert(
     published_at: timestamp,
   };
 }
+
+// =============================================================================
+// Notification CTR & Retention Session Tracker
+// =============================================================================
+
+export interface ActiveNotificationSession {
+  articleId: string;
+  category: CategoryKey;
+  startTime: number;
+  swipesCount: number;
+}
+
+class NotificationSessionTracker {
+  private activeSession: ActiveNotificationSession | null = null;
+
+  /**
+   * Starts a new notification tracking session upon user notification tap.
+   * Records initial start time and resets downstream swipes count.
+   */
+  startSession(articleId: string, category: CategoryKey): void {
+    if (this.activeSession) {
+      this.endSession();
+    }
+    this.activeSession = {
+      articleId,
+      category,
+      startTime: Date.now(),
+      swipesCount: 0,
+    };
+  }
+
+  /**
+   * Increments downstream swipes count if an active notification session exists.
+   */
+  recordSwipe(): void {
+    if (this.activeSession) {
+      this.activeSession.swipesCount += 1;
+    }
+  }
+
+  /**
+   * Ends the notification session and fires notification_session_complete beacon.
+   */
+  endSession(): void {
+    if (!this.activeSession) return;
+
+    const { articleId, category, startTime, swipesCount } = this.activeSession;
+    const sessionDurationSeconds = Math.max(
+      0,
+      Math.round(((Date.now() - startTime) / 1000) * 10) / 10
+    );
+
+    // Reset active session immediately to prevent duplicate flushes
+    this.activeSession = null;
+
+    trackNotificationEvent({
+      article_id: articleId,
+      category,
+      action: 'notification_session_complete',
+      dwell_seconds: sessionDurationSeconds,
+      swipes_count: swipesCount,
+      trigger_article_id: articleId,
+      session_duration_seconds: sessionDurationSeconds,
+      articles_swiped_count: swipesCount,
+    }).catch((err) => {
+      console.warn('[ZeroDaily NotificationTracker] Failed to flush session end beacon:', err);
+    });
+  }
+
+  /**
+   * Returns current active session or null.
+   */
+  getActiveSession(): ActiveNotificationSession | null {
+    return this.activeSession;
+  }
+}
+
+export const notificationSessionTracker = new NotificationSessionTracker();
+
+// Listen to AppState changes (background/inactive) to automatically flush endSession()
+AppState.addEventListener('change', (nextState: AppStateStatus) => {
+  if (nextState === 'background' || nextState === 'inactive') {
+    notificationSessionTracker.endSession();
+  }
+});
+
