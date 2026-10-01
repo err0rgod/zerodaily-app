@@ -3,6 +3,14 @@ import { CACHE_TTL_MS, shuffleArray, useFeedStore } from '../src/store/feedStore
 import { readingTracker } from '../src/utils/readingTracker';
 import { Article } from '../src/types';
 
+// Mock react-native
+jest.mock('react-native', () => ({
+  Platform: { OS: 'android' },
+  AppState: {
+    addEventListener: jest.fn(() => ({ remove: jest.fn() })),
+  },
+}));
+
 // Mock AsyncStorage
 const mockStorage: Record<string, string> = {};
 jest.mock('@react-native-async-storage/async-storage', () => ({
@@ -13,6 +21,17 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   removeItem: jest.fn(async (key: string) => {
     delete mockStorage[key];
   }),
+}));
+
+jest.mock('expo-notifications', () => ({
+  setNotificationHandler: jest.fn(),
+  setNotificationChannelAsync: jest.fn(),
+  getPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
+  requestPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
+  getDevicePushTokenAsync: jest.fn(async () => ({ data: 'test_token' })),
+  getExpoPushTokenAsync: jest.fn(async () => ({ data: 'test_expo_token' })),
+  scheduleNotificationAsync: jest.fn(),
+  addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
 }));
 
 // Mock fetchFeed

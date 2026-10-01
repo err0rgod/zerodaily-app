@@ -144,13 +144,15 @@ export function interleaveArticles(
 /**
  * Ranks and filters articles for feed personalization:
  * - In single category views, articles remain strictly chronological (newest first).
- * - In the unified 'all' feed, filters out categories explicitly disabled in topic_preferences
- *   and re-ranks the batch using Weighted Diverse Interleaving with Anti-Clumping.
+ * - In the unified 'all' (Hot) feed, strictly filters for channels that the user
+ *   subscribed for notifications or demonstrated high interest in (via algo_weights / topic_preferences).
+ * - Re-ranks the filtered batch using Weighted Diverse Interleaving with Anti-Clumping.
  */
 export function rankArticlesForUser(
   articles: Article[],
   user: UserProfile | null,
-  currentCategory: CategoryKey
+  currentCategory: CategoryKey,
+  notificationPreferences?: Record<string, boolean> | null
 ): Article[] {
   if (!articles || articles.length === 0) {
     return [];
@@ -161,19 +163,34 @@ export function rankArticlesForUser(
     return articles;
   }
 
-  // 1. Topic Preferences Filtering
-  const preferences = user?.topic_preferences;
-  let filtered = articles;
-  if (preferences) {
-    filtered = articles.filter((article) => {
-      if (!article || !article.id) return false;
-      // If user explicitly unsubscribed from category, exclude from 'all' feed
-      return preferences[article.category] !== false;
-    });
-    // If filtering excluded all articles, fallback to unfiltered so feed never empties
-    if (filtered.length === 0) {
-      filtered = articles;
+  // 1. Topic Preferences & Notification Channels Filtering for Hot Feed
+  const topicPrefs = user?.topic_preferences;
+  const algoWeights = user?.algo_weights;
+  const notifPrefs = notificationPreferences;
+
+  let filtered = articles.filter((article) => {
+    if (!article || !article.id) return false;
+    const cat = article.category;
+
+    // Hard exclusion: If user explicitly toggled off category in topic_preferences or notification preferences
+    if (topicPrefs && topicPrefs[cat] === false) return false;
+    if (notifPrefs && notifPrefs[cat] === false) return false;
+
+    // Active inclusion: Check if category is subscribed for notifications, selected in topics, or has high user engagement
+    const isSubscribedInNotifs = notifPrefs ? notifPrefs[cat] === true : false;
+    const isSubscribedInTopics = topicPrefs ? topicPrefs[cat] === true : false;
+    const hasDemonstratedInterest = algoWeights ? (algoWeights[cat] ?? 1.0) > 1.2 : false;
+
+    if (notifPrefs || topicPrefs) {
+      return isSubscribedInNotifs || isSubscribedInTopics || hasDemonstratedInterest;
     }
+
+    return true;
+  });
+
+  // If filtering excluded all articles, fallback to unfiltered so feed never empties
+  if (filtered.length === 0) {
+    filtered = articles;
   }
 
   // 2. Weighted Diverse Interleaving with Anti-Clumping

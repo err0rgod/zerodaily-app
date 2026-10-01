@@ -156,5 +156,33 @@ describe('Personalization & Algorithmic Feed Ranking', () => {
   test('interleaveArticles handles null or empty input gracefully', () => {
     expect(rankArticlesForUser([], mockUser, 'ai')).toEqual([]);
   });
+
+  test('rankArticlesForUser strictly filters Hot feed to subscribed notification channels and demonstrated interest', () => {
+    const aiArticle: Article = { ...baseArticle, id: 'art-ai', category: 'ai' };
+    const cyberArticle: Article = { ...baseArticle, id: 'art-cyber', category: 'cybersec' };
+    const financeArticle: Article = { ...baseArticle, id: 'art-fin', category: 'finance' };
+    const roboticsArticle: Article = { ...baseArticle, id: 'art-rob', category: 'robotics' };
+
+    const notifPrefs = {
+      ai: true,
+      cybersec: true,
+      finance: false,
+      robotics: false,
+    };
+
+    // User without special interest in finance or robotics
+    const result = rankArticlesForUser(
+      [aiArticle, cyberArticle, financeArticle, roboticsArticle],
+      mockUser,
+      'all',
+      notifPrefs
+    );
+
+    const ids = result.map((a) => a.id);
+    expect(ids).toContain('art-ai');
+    expect(ids).toContain('art-cyber');
+    expect(ids).not.toContain('art-fin');
+    expect(ids).not.toContain('art-rob');
+  });
 });
 

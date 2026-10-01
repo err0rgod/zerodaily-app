@@ -5,6 +5,7 @@ import { Article, CategoryKey } from '../types';
 import { rankArticlesForUser } from '../utils/personalization';
 import { readingTracker } from '../utils/readingTracker';
 import { useUserStore } from './userStore';
+import { useSettingsStore } from './settingsStore';
 
 const STORAGE_CACHE_KEY_PREFIX = '@zerodaily_feed_cache_';
 const PREFETCH_THRESHOLD = 8; // Fetch next batch when remaining cards <= 8
@@ -141,7 +142,8 @@ export function shuffleArray<T>(items: T[]): T[] {
  */
 function personalizeAndMerge(articles: Article[], notifArticle: Article | null, currentCategory: CategoryKey): Article[] {
   const user = useUserStore.getState().user;
-  const personalized = rankArticlesForUser(articles, user, currentCategory);
+  const notifPrefs = useSettingsStore.getState().preferences;
+  const personalized = rankArticlesForUser(articles, user, currentCategory, notifPrefs);
   return mergeWithNotification(personalized, notifArticle, currentCategory);
 }
 
@@ -477,7 +479,8 @@ export const useFeedStore = create<FeedState>((set, get) => ({
         }
 
         const user = useUserStore.getState().user;
-        const personalizedFresh = rankArticlesForUser(fresh, user, category);
+        const notifPrefs = useSettingsStore.getState().preferences;
+        const personalizedFresh = rankArticlesForUser(fresh, user, category, notifPrefs);
 
         const updated = [...articles, ...personalizedFresh];
         set({
