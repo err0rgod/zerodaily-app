@@ -2,7 +2,7 @@
   "expo": {
     "name": "ZeroDaily",
     "slug": "zerodaily",
-    "version": "0.5.6",
+    "version": "0.5.7",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "in.zerodaily.app",
-      "versionCode": 27,
+      "versionCode": 28,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -28,7 +28,8 @@
         "android.permission.INTERNET",
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.VIBRATE",
-        "android.permission.WAKE_LOCK"
+        "android.permission.WAKE_LOCK",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "web": {
