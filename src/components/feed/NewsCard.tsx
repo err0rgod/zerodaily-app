@@ -1,11 +1,12 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Bookmark, ChevronRight, ExternalLink, Globe, Share2 } from 'lucide-react-native';
+import { Bookmark, ExternalLink, Globe, Heart, Share2 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Platform, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { getDynamicFallbackImage } from '../../constants/categories';
 import { useBookmarkStore } from '../../store/bookmarkStore';
+import { useLikeStore } from '../../store/likeStore';
 import { useTheme } from '../../store/themeStore';
 import { useUserStore } from '../../store/userStore';
 import { Article, CategoryKey } from '../../types';
@@ -32,6 +33,11 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
   const { colors, isDark } = useTheme();
   const bookmarked = useBookmarkStore(React.useCallback((s) => s.bookmarks.some((b) => b.id === article.id), [article.id]));
   const toggleBookmark = useBookmarkStore((s) => s.toggleBookmark);
+
+  const isLiked = useLikeStore(React.useCallback((s) => s.likedIds.includes(article.id), [article.id]));
+  const toggleLike = useLikeStore((s) => s.toggleLike);
+
+  const lastTapRef = React.useRef<number>(0);
 
   const { fontScale } = useWindowDimensions();
   const isLargeFont = fontScale > 1.15;
@@ -60,6 +66,21 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
     useUserStore.getState().syncBookmarks(currentBookmarks, syncMode).catch(() => {});
   };
 
+  const handleToggleLike = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    await toggleLike(article);
+  };
+
+  const handleDoubleTap = async () => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 320) {
+      lastTapRef.current = 0;
+      await handleToggleLike();
+    } else {
+      lastTapRef.current = now;
+    }
+  };
+
   const handleShare = () => {
     shareArticle(article);
     useUserStore.getState().trackEvent(article.id, article.category, 'share');
@@ -73,7 +94,11 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
   const domain = extractDomain(article.link);
   const relativeTime = formatRelativeTime(article.published_at);
 
-  const scrimColors = isDark
+  const topScrimColors = isDark
+    ? ([colors.card, 'rgba(10, 10, 10, 0.45)', 'transparent'] as const)
+    : ([colors.card, 'rgba(255, 255, 255, 0.45)', 'transparent'] as const);
+
+  const bottomScrimColors = isDark
     ? (['transparent', 'rgba(10, 10, 10, 0.45)', colors.card] as const)
     : (['transparent', 'rgba(255, 255, 255, 0.45)', colors.card] as const);
 
@@ -123,10 +148,18 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
             }}
           />
 
+          {/* Top Fusing Scrim Gradient */}
           <LinearGradient
-            colors={scrimColors}
-            locations={[0.55, 0.85, 1]}
-            style={styles.gradientOverlay}
+            colors={topScrimColors}
+            locations={[0, 0.45, 1]}
+            style={styles.gradientTopOverlay}
+          />
+
+          {/* Bottom Fusing Scrim Gradient */}
+          <LinearGradient
+            colors={bottomScrimColors}
+            locations={[0.5, 0.85, 1]}
+            style={styles.gradientBottomOverlay}
           />
 
           {/* Floating Metadata Pill Row: ZERODAILY brand only + Reading metrics */}
@@ -141,7 +174,7 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
           </View>
         </TouchableOpacity>
 
-        {/* 2. Editorial Headline & Fully Extended Summary Body */}
+        {/* 2. Editorial Headline & Fully Extended Summary Body (Double-tap to like) */}
         <View style={styles.bodyContainer}>
           <TouchableOpacity
             activeOpacity={0.92}
@@ -155,7 +188,11 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
             </Text>
           </TouchableOpacity>
 
-          <View style={styles.headlineAndSummary}>
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={handleDoubleTap}
+            style={styles.headlineAndSummary}
+          >
             <Text
               style={[styles.summary, { color: colors.textSecondary }]}
               numberOfLines={summaryLines}
@@ -164,7 +201,7 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
             >
               {article.shortSummary}
             </Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
         {/* 3. Refined Footer Actions Bar */}
@@ -201,15 +238,34 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
             <ExternalLink size={12} color={colors.textMuted} />
           </TouchableOpacity>
 
-          {/* Bookmark & Share Actions */}
+          {/* Action Buttons: Like -> Share -> Bookmark */}
           <View style={styles.actionButtonsRow}>
+            {/* 1. Like Action */}
             <IconButton
-              icon={<ChevronRight size={18} color={colors.primary} />}
-              onPress={handleOpenFullStory}
+              icon={
+                <Heart
+                  size={18}
+                  color={isLiked ? '#EF4444' : colors.textPrimary}
+                  fill={isLiked ? '#EF4444' : 'transparent'}
+                />
+              }
+              onPress={handleToggleLike}
               size={36}
-              accessibilityLabel="Read the full story"
-              style={[styles.actionBtn, styles.readMoreBtn, { borderColor: colors.primary }]}
+              active={isLiked}
+              accessibilityLabel={isLiked ? 'Unlike this story' : 'Like this story'}
+              style={styles.actionBtn}
             />
+
+            {/* 2. Share Action */}
+            <IconButton
+              icon={<Share2 size={17} color={colors.textPrimary} />}
+              onPress={handleShare}
+              size={36}
+              accessibilityLabel="Share this story"
+              style={styles.actionBtn}
+            />
+
+            {/* 3. Bookmark Action */}
             <IconButton
               icon={
                 <Bookmark
@@ -222,13 +278,6 @@ export const NewsCard: React.FC<NewsCardProps> = React.memo(({
               size={36}
               active={bookmarked}
               accessibilityLabel={bookmarked ? 'Remove bookmark' : 'Bookmark this story'}
-              style={styles.actionBtn}
-            />
-            <IconButton
-              icon={<Share2 size={17} color={colors.textPrimary} />}
-              onPress={handleShare}
-              size={36}
-              accessibilityLabel="Share this story"
               style={styles.actionBtn}
             />
           </View>
@@ -266,12 +315,21 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  gradientOverlay: {
+  gradientTopOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 48,
+    zIndex: 2,
+  },
+  gradientBottomOverlay: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    height: '100%',
+    height: '60%',
+    zIndex: 2,
   },
   overlayRow: {
     position: 'absolute',
@@ -281,6 +339,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    zIndex: 3,
   },
   brandBadge: {
     backgroundColor: 'rgba(9, 11, 17, 0.82)',

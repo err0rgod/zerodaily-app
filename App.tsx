@@ -17,11 +17,15 @@ import {
 import { FullRoastModal } from './src/components/modals/FullRoastModal';
 import { ImageViewerModal } from './src/components/modals/ImageViewerModal';
 import { SettingsModal } from './src/components/modals/SettingsModal';
+import * as Clipboard from 'expo-clipboard';
 import { AuthModal } from './src/components/modals/AuthModal';
 import { openArticleSource } from './src/components/webview/ArticleReader';
+import { fetchArticleById } from './src/api/client';
+import { useDeepLinks } from './src/hooks/useDeepLinks';
 import { useNotifications } from './src/hooks/useNotifications';
 import { useBookmarkStore } from './src/store/bookmarkStore';
 import { useFeedStore } from './src/store/feedStore';
+import { useLikeStore } from './src/store/likeStore';
 import { useTheme, useThemeStore } from './src/store/themeStore';
 import { useUserStore } from './src/store/userStore';
 import { Article, CategoryKey } from './src/types';
@@ -70,14 +74,37 @@ export default function App() {
     onArticleSelected: handleArticleSelectedFromNotification,
   });
 
+  // Universal Links & Android App Links routing (https://zerodaily.in/a/:id, zerodaily://a/:id)
+  useDeepLinks({
+    onArticleOpened: handleArticleSelectedFromNotification,
+  });
+
   useEffect(() => {
     initTheme();
     loadBookmarks();
+    useLikeStore.getState().loadLikes();
     useUserStore.getState().initSession();
 
-    // Check first-launch onboarding status
+    // Check first-launch onboarding status & deferred deep links
     async function checkOnboarding() {
       try {
+        // Deferred deep-link handshake from web download page
+        const clipText = await Clipboard.getStringAsync().catch(() => '');
+        if (clipText && clipText.startsWith('zerodaily:')) {
+          const deferredId = clipText.replace('zerodaily:', '').trim();
+          if (deferredId) {
+            await Clipboard.setStringAsync('').catch(() => {});
+            fetchArticleById(deferredId)
+              .then((fresh) => {
+                if (fresh) {
+                  useFeedStore.getState().setArticleDirectly(fresh);
+                  handleArticleSelectedFromNotification();
+                }
+              })
+              .catch(() => {});
+          }
+        }
+
         const completed = await AsyncStorage.getItem(ONBOARDING_COMPLETED_KEY);
         if (completed !== 'true') {
           const token = await AsyncStorage.getItem('@zerodaily_auth_token');

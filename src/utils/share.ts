@@ -6,11 +6,12 @@ import { Article } from '../types';
  */
 export async function shareArticle(article: Article): Promise<void> {
   try {
-    const message = `${article.heading}\n\nRead more on ZeroDaily:\n${article.link}`;
+    const shareUrl = `https://zerodaily.in/a/${article.id}`;
+    const message = `${article.heading}\n\nRead more on ZeroDaily:\n${shareUrl}`;
     await Share.share({
       title: article.heading,
       message,
-      url: article.link,
+      url: shareUrl,
     });
   } catch (error) {
     console.warn('[ZeroDaily Share] Failed to share article:', error);

@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { Bookmark, ChevronLeft, ExternalLink, Globe, Share2, X } from 'lucide-react-native';
+import { Bookmark, ChevronLeft, ExternalLink, Globe, Heart, Share2, X } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   Modal,
@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { CATEGORIES, getDynamicFallbackImage } from '../../constants/categories';
 import { useBookmarkStore } from '../../store/bookmarkStore';
+import { useLikeStore } from '../../store/likeStore';
 import { useTheme } from '../../store/themeStore';
 import { useUserStore } from '../../store/userStore';
 import { Article } from '../../types';
@@ -79,6 +80,17 @@ export const FullRoastModal: React.FC<FullRoastModalProps> = ({
     .split('\n\n')
     .filter((p) => p.trim().length > 0);
 
+  const isLiked = useLikeStore(React.useCallback((s) => (article ? s.likedIds.includes(article.id) : false), [article?.id]));
+  const toggleLike = useLikeStore((s) => s.toggleLike);
+
+  const handleToggleLike = async () => {
+    if (!article) return;
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    }
+    await toggleLike(article);
+  };
+
   const handleToggleBookmark = async () => {
     if (Platform.OS !== 'web') {
       Haptics.selectionAsync().catch(() => {});
@@ -124,6 +136,30 @@ export const FullRoastModal: React.FC<FullRoastModalProps> = ({
             </View>
 
             <View style={styles.headerActions}>
+              {/* 1. Like Action */}
+              <IconButton
+                icon={
+                  <Heart
+                    size={18}
+                    color={isLiked ? '#EF4444' : colors.textPrimary}
+                    fill={isLiked ? '#EF4444' : 'transparent'}
+                  />
+                }
+                onPress={handleToggleLike}
+                size={36}
+                active={isLiked}
+                accessibilityLabel={isLiked ? 'Unlike this story' : 'Like this story'}
+                style={styles.headerIconBtn}
+              />
+              {/* 2. Share Action */}
+              <IconButton
+                icon={<Share2 size={18} color={colors.textPrimary} />}
+                onPress={handleShare}
+                size={36}
+                accessibilityLabel="Share this story"
+                style={styles.headerIconBtn}
+              />
+              {/* 3. Bookmark Action */}
               <IconButton
                 icon={
                   <Bookmark
@@ -135,14 +171,10 @@ export const FullRoastModal: React.FC<FullRoastModalProps> = ({
                 onPress={handleToggleBookmark}
                 size={36}
                 active={bookmarked}
+                accessibilityLabel={bookmarked ? 'Remove bookmark' : 'Bookmark this story'}
                 style={styles.headerIconBtn}
               />
-              <IconButton
-                icon={<Share2 size={18} color={colors.textPrimary} />}
-                onPress={handleShare}
-                size={36}
-                style={styles.headerIconBtn}
-              />
+              {/* Close Button */}
               <TouchableOpacity
                 activeOpacity={0.7}
                 onPress={handleClose}

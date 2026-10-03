@@ -183,7 +183,7 @@ export interface AuthResponse {
 export interface TrackingEventPayload {
   article_id: string;
   category: string;
-  action: 'read' | 'dwell' | 'skip' | 'bookmark' | 'share' | 'full_roast';
+  action: 'read' | 'dwell' | 'skip' | 'bookmark' | 'share' | 'full_roast' | 'like';
   duration_seconds?: number;
 }
 

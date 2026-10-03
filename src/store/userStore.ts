@@ -45,7 +45,8 @@ interface UserState {
 
   // Preferences & Algorithmic Tracking
   updatePreferences: (preferences: Record<string, boolean>) => Promise<void>;
-  trackEvent: (articleId: string, category: string, action: 'read' | 'dwell' | 'skip' | 'bookmark' | 'share' | 'full_roast', durationSeconds?: number) => Promise<void>;
+  boostCategoryWeight: (category: string, delta: number) => Promise<void>;
+  trackEvent: (articleId: string, category: string, action: 'read' | 'dwell' | 'skip' | 'bookmark' | 'share' | 'full_roast' | 'like', durationSeconds?: number) => Promise<void>;
   syncBookmarks: (bookmarks: string[], mode?: 'merge' | 'replace') => Promise<string[]>;
 }
 
@@ -312,10 +313,24 @@ export const useUserStore = create<UserState>((set, get) => ({
     }
   },
 
+  boostCategoryWeight: async (category: string, delta: number) => {
+    const { user } = get();
+    if (!user) return;
+
+    const currentWeights = user.algo_weights || {};
+    const current = currentWeights[category] ?? 1.0;
+    const updatedWeight = Math.max(0.2, Math.min(3.0, Number((current + delta).toFixed(3))));
+    const updatedWeights = { ...currentWeights, [category]: updatedWeight };
+
+    const updatedUser: UserProfile = { ...user, algo_weights: updatedWeights };
+    await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(updatedUser)).catch(() => {});
+    set({ user: updatedUser });
+  },
+
   trackEvent: async (
     articleId: string,
     category: string,
-    action: 'read' | 'dwell' | 'skip' | 'bookmark' | 'share' | 'full_roast',
+    action: 'read' | 'dwell' | 'skip' | 'bookmark' | 'share' | 'full_roast' | 'like',
     durationSeconds: number = 0.0
   ) => {
     const { token, user } = get();
