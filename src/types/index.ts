@@ -50,6 +50,8 @@ export interface Article {
   is_breaking?: boolean;
   /** Alert punchline (max 50 chars) sent via FCM */
   push_punchline?: string;
+  /** Short 8-character unique alphanumeric slug for clean sharing */
+  short_code?: string;
 }
 
 /** Cursor-based pagination metadata returned by GET /api/v1/feed */

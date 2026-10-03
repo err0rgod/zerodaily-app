@@ -6,7 +6,8 @@ import { Article } from '../types';
  */
 export async function shareArticle(article: Article): Promise<void> {
   try {
-    const shareUrl = `https://zerodaily.in/a/${encodeURIComponent(article.id)}`;
+    const shareId = article.short_code || encodeURIComponent(article.id);
+    const shareUrl = `https://zerodaily.in/a/${shareId}`;
     const message = `${article.heading}\n\nDownload ZeroDaily for fastest tech news:\n${shareUrl}`;
     await Share.share({
       title: article.heading,
