@@ -123,6 +123,7 @@ zerodaily-app/
 
 | Version | Version Code | Highlights |
 | :--- | :--- | :--- |
+| `0.5.8` | `29` | Updated brand identity and app icon assets with official Z vector logo |
 | `0.5.7` | `28` | Added `POST_NOTIFICATIONS` permission for Android 13+, FCM topic sync fix |
 | `0.5.6` | `27` | Notification CTR & retention session tracker release, version bump |
 | `0.5.5` | `26` | 2.0s read tracking dwell threshold, cold-start tap deduplication |
