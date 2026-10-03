@@ -19,22 +19,22 @@ export function extractArticleIdFromUrl(url: string): string | null {
   if (!url || typeof url !== 'string') return null;
   const clean = url.trim();
 
-  // 1. Custom scheme: zerodaily://a/:id or zerodaily://story/:id
-  const customSchemeMatch = clean.match(/^zerodaily:\/\/(?:a|story)\/([^?#/]+)/i);
+  // 1. Query param fallback: ?id=:id or ?article_id=:id
+  const queryMatch = clean.match(/[?&](?:id|article_id)=([^&#]+)/i);
+  if (queryMatch && queryMatch[1]) {
+    return decodeURIComponent(queryMatch[1]);
+  }
+
+  // 2. Custom scheme: zerodaily://a/:id or zerodaily://story/:id
+  const customSchemeMatch = clean.match(/^zerodaily:\/\/(?:a|story)\/(.+?)(?:[?#]|$)/i);
   if (customSchemeMatch && customSchemeMatch[1]) {
     return decodeURIComponent(customSchemeMatch[1]);
   }
 
-  // 2. Web universal link: https://zerodaily.in/a/:id or https://zerodaily.in/story/:id
-  const httpMatch = clean.match(/^https?:\/\/(?:[a-zA-Z0-9-]+\.)?zerodaily\.in\/(?:a|story)\/([^?#/]+)/i);
+  // 3. Web universal link: https://zerodaily.in/a/:id or https://zerodaily.in/story/:id
+  const httpMatch = clean.match(/^https?:\/\/(?:[a-zA-Z0-9-]+\.)?zerodaily\.in\/(?:a|story)\/(.+?)(?:[?#]|$)/i);
   if (httpMatch && httpMatch[1]) {
     return decodeURIComponent(httpMatch[1]);
-  }
-
-  // 3. Query param fallback: ?id=:id or ?article_id=:id
-  const queryMatch = clean.match(/[?&](?:id|article_id)=([^&#]+)/i);
-  if (queryMatch && queryMatch[1]) {
-    return decodeURIComponent(queryMatch[1]);
   }
 
   return null;

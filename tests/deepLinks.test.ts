@@ -49,6 +49,15 @@ describe('extractArticleIdFromUrl', () => {
     expect(extractArticleIdFromUrl('zerodaily://open?article_id=param_id_88')).toBe('param_id_88');
   });
 
+  it('extracts canonical full URL IDs whether encoded or unencoded', () => {
+    const rawUrl = 'https://www.tomshardware.com/tech-industry/cyber-security/malicious-vpn';
+    expect(extractArticleIdFromUrl(`https://zerodaily.in/a/${encodeURIComponent(rawUrl)}`)).toBe(rawUrl);
+    expect(extractArticleIdFromUrl(`https://zerodaily.in/a/${rawUrl}`)).toBe(rawUrl);
+    expect(extractArticleIdFromUrl(`zerodaily://a/${encodeURIComponent(rawUrl)}`)).toBe(rawUrl);
+    expect(extractArticleIdFromUrl(`zerodaily://a/${rawUrl}`)).toBe(rawUrl);
+    expect(extractArticleIdFromUrl(`https://zerodaily.in/?id=${encodeURIComponent(rawUrl)}`)).toBe(rawUrl);
+  });
+
   it('returns null for unrelated URLs', () => {
     expect(extractArticleIdFromUrl('https://zerodaily.in/privacy')).toBeNull();
     expect(extractArticleIdFromUrl('https://google.com')).toBeNull();
