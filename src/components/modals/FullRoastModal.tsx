@@ -44,6 +44,11 @@ export const FullRoastModal: React.FC<FullRoastModalProps> = ({
   );
   const toggleBookmark = useBookmarkStore((s) => s.toggleBookmark);
 
+  const isLiked = useLikeStore(
+    React.useCallback((s) => (article ? s.likedIds.includes(article.id) : false), [article?.id])
+  );
+  const toggleLike = useLikeStore((s) => s.toggleLike);
+
   const [hasLoadError, setHasLoadError] = useState<boolean>(false);
   const [scrollKey, setScrollKey] = useState<number>(0);
 
@@ -80,9 +85,6 @@ export const FullRoastModal: React.FC<FullRoastModalProps> = ({
     .split('\n\n')
     .filter((p) => p.trim().length > 0);
 
-  const isLiked = useLikeStore(React.useCallback((s) => (article ? s.likedIds.includes(article.id) : false), [article?.id]));
-  const toggleLike = useLikeStore((s) => s.toggleLike);
-
   const handleToggleLike = async () => {
     if (!article) return;
     if (Platform.OS !== 'web') {
@@ -92,6 +94,7 @@ export const FullRoastModal: React.FC<FullRoastModalProps> = ({
   };
 
   const handleToggleBookmark = async () => {
+    if (!article) return;
     if (Platform.OS !== 'web') {
       Haptics.selectionAsync().catch(() => {});
     }
@@ -99,6 +102,7 @@ export const FullRoastModal: React.FC<FullRoastModalProps> = ({
   };
 
   const handleShare = () => {
+    if (!article) return;
     shareArticle(article);
   };
 
