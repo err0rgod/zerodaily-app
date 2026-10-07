@@ -86,9 +86,11 @@ describe('SettingsModal Static & AST Analysis', () => {
     }
 
     findJsxTexts(sourceFile);
-    const versionNode = jsxTexts.find((t) => t.includes('v1.6.3'));
+    const pkg = require('../package.json');
+    const expectedVersionString = `ZeroDaily Mobile • v${pkg.version}`;
+    const versionNode = jsxTexts.find((t) => t.includes(`v${pkg.version}`));
     expect(versionNode).toBeDefined();
-    expect(versionNode).toBe('ZeroDaily Mobile • v1.6.3');
+    expect(versionNode).toBe(expectedVersionString);
   });
 
   test('AST confirms no TypeScript suppression directives (ts-ignore, ts-expect-error, ts-nocheck)', () => {
