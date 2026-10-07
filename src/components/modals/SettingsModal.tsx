@@ -1,10 +1,13 @@
 import * as Haptics from 'expo-haptics';
 import {
   AlertCircle,
+  ExternalLink,
+  FileText,
   LogIn,
   LogOut,
   Moon,
   Settings,
+  Shield,
   ShieldCheck,
   Smartphone,
   Sun,
@@ -15,6 +18,7 @@ import {
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
+  Linking,
   Modal,
   Platform,
   SafeAreaView,
@@ -96,6 +100,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
         },
       ]
     );
+  };
+
+  const handleOpenURL = async (url: string) => {
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Cannot Open Link', `Unable to open link on this device: ${url}`);
+      }
+    } catch (error) {
+      console.error('[SettingsModal] Error opening URL:', error);
+      Alert.alert('Error', 'An unexpected error occurred while attempting to open the link.');
+    }
   };
 
   return (
@@ -286,11 +304,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
               );
             })}
 
+            {/* Section: Legal & Policies */}
+            <Text style={[styles.sectionHeader, { color: colors.textMuted, marginTop: 10 }]}>LEGAL & POLICIES</Text>
+
+            <TouchableOpacity
+              activeOpacity={0.7}
+              accessibilityRole="link"
+              accessibilityLabel="Privacy Policy"
+              onPress={() => handleOpenURL('https://zerodaily.in/privacy')}
+              style={[styles.preferenceRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            >
+              <View style={styles.preferenceLeft}>
+                <Shield size={18} color={colors.textSecondary} />
+                <Text style={[styles.prefTitle, { color: colors.textPrimary }]}>Privacy Policy</Text>
+              </View>
+              <ExternalLink size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.7}
+              accessibilityRole="link"
+              accessibilityLabel="Terms of Service"
+              onPress={() => handleOpenURL('https://zerodaily.in/terms')}
+              style={[styles.preferenceRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            >
+              <View style={styles.preferenceLeft}>
+                <FileText size={18} color={colors.textSecondary} />
+                <Text style={[styles.prefTitle, { color: colors.textPrimary }]}>Terms of Service</Text>
+              </View>
+              <ExternalLink size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+
             {/* About Info */}
             <View style={styles.aboutFooter}>
               <AlertCircle size={14} color={colors.textMuted} />
               <Text style={[styles.aboutText, { color: colors.textMuted }]}>
-                ZeroDaily Mobile • v0.5.4
+                ZeroDaily Mobile • v1.6.3
               </Text>
             </View>
           </ScrollView>
@@ -468,6 +517,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 10,
     borderWidth: 1,
+  },
+  preferenceLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   prefTextCol: {
     flex: 1,

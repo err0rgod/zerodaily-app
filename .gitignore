@@ -32,3 +32,6 @@ yarn-error.log*
 *.pem
 *.apk
 Thumbs.db
+
+# Agent scratch directories
+.agents/
