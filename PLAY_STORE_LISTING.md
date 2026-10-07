@@ -2,7 +2,7 @@
 
 **Application Name:** ZeroDaily  
 **Package Identifier:** `in.zerodaily.app`  
-**Target Release:** v1.6.3 (Version Code: 34)  
+**Target Release:** v1.6.4 (Version Code: 35)  
 **Target Platform:** Android (Google Play Console)  
 **Production Web Domain:** `https://zerodaily.in`  
 **Backend API Origin:** `https://api.zerodaily.in`  
