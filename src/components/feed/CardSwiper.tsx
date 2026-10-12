@@ -104,7 +104,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
   const domainBannerOpacity = useRef(new Animated.Value(0)).current;
   const domainBannerTranslateY = useRef(new Animated.Value(-20)).current;
   const domainBannerScale = useRef(new Animated.Value(0.9)).current;
-  const domainBannerTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const domainBannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
    * The pull-to-refresh badge is mounted only while a drag is genuinely in progress.

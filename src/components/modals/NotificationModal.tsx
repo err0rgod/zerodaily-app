@@ -17,13 +17,13 @@ import {
   Modal,
   Platform,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { fetchArticleById } from '../../api/client';
 import { CATEGORIES, CATEGORY_LIST, getDynamicFallbackImage } from '../../constants/categories';
 import { scheduleTestBreakingAlert } from '../../services/notificationService';

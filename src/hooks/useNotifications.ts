@@ -28,8 +28,8 @@ export function useNotifications(options?: UseNotificationsOptions) {
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
-  const responseListener = useRef<Notifications.Subscription>();
-  const receivedListener = useRef<Notifications.Subscription>();
+  const responseListener = useRef<Notifications.EventSubscription | undefined>(undefined);
+  const receivedListener = useRef<Notifications.EventSubscription | undefined>(undefined);
   const lastAlertTimestampRef = useRef<string>(new Date().toISOString());
   const lastHandledNotificationIdRef = useRef<string | null>(null);
   const isInitializedRef = useRef<boolean>(false);
@@ -268,12 +268,12 @@ export function useNotifications(options?: UseNotificationsOptions) {
     return () => {
       if (receivedListener.current) {
         try {
-          Notifications.removeNotificationSubscription(receivedListener.current);
+          receivedListener.current.remove();
         } catch {}
       }
       if (responseListener.current) {
         try {
-          Notifications.removeNotificationSubscription(responseListener.current);
+          responseListener.current.remove();
         } catch {}
       }
       appStateSub.remove();

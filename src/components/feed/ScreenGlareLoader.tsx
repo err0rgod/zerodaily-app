@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   glareContainer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     overflow: 'hidden',
     zIndex: 100,
     elevation: 10,

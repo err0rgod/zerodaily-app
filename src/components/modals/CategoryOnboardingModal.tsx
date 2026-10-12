@@ -6,13 +6,13 @@ import {
   ActivityIndicator,
   Modal,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { CATEGORY_LIST } from '../../constants/categories';
 import { registerForPushNotificationsAsync } from '../../services/notificationService';
 import { useSettingsStore } from '../../store/settingsStore';
