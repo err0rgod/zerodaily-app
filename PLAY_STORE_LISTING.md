@@ -260,6 +260,7 @@ Under Google Play's mandatory Data Safety policy, developers must accurately dec
 | **Device or other IDs** | **Device or other IDs** (FCM Push Token) | **YES** | **NO** | **NO** | **Optional** | • App functionality (Push Notifications) |
 | **App info and performance** | **Crash logs & Diagnostics** | **YES** | **NO** | **NO** | **Required** | • Analytics<br>• App functionality |
 | **App info and performance** | **App interactions** (Reading Dwell & Swipes) | **YES** | **NO** | **NO** | **Required** | • App functionality<br>• Personalization |
+| **Location** | **Approximate location** (country / region / city derived from IP address) | **YES** | **NO** | **NO** | **Required** | • Analytics<br>• Fraud prevention, security & compliance |
 
 ---
 
@@ -317,6 +318,16 @@ Under Google Play's mandatory Data Safety policy, developers must accurately dec
 - **Purposes for collection:**
   - `App functionality`: Anti-clumping algorithmic ranking and feed pagination.
   - `Personalization`: Tuning local user affinity weights (`algo_weights`) based on reading habits.
+
+#### G. Location: Approximate Location (IP-derived)
+- **Is this data collected?** **YES**
+- **Is this data shared?** **NO**
+- **Is this data processed ephemerally?** **NO** (The client IP address and Cloudflare-resolved country, region, city and timezone are stored on the DynamoDB user record when a guest session is created and on Google sign-in).
+- **Is this data collection required or optional?** **Required** (Captured server-side from Cloudflare edge headers for every guest and signed-in account; the app never requests the device `ACCESS_*_LOCATION` permissions).
+- **Purposes for collection:**
+  - `Analytics`: Understanding the regional distribution of readers.
+  - `Fraud prevention, security & compliance`: Detecting abusive or automated account creation.
+- **Note:** Google Play treats IP-derived city-level location as *Approximate location*, so it must be declared even though no GPS or location permission is used.
 
 ---
 
