@@ -4,7 +4,6 @@ import React, { useMemo, useState } from 'react';
 import {
   FlatList,
   Modal,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { CATEGORIES, CATEGORY_LIST, getDynamicFallbackImage } from '../../constants/categories';
 import { useFeedStore } from '../../store/feedStore';
 import { useTheme } from '../../store/themeStore';

@@ -189,7 +189,7 @@ export default function App() {
             style={[styles.safeArea, { backgroundColor: colors.background }]}
             edges={['top', 'left', 'right', 'bottom']}
           >
-            <StatusBar style={isDark ? 'light' : 'dark'} backgroundColor={colors.background} />
+            <StatusBar style={isDark ? 'light' : 'dark'} />
 
             <View style={[styles.appContainer, { backgroundColor: colors.background }]}>
               {/* 1. Category selection pill bar directly below top safe area */}
