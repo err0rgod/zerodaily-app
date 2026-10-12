@@ -35,3 +35,7 @@ Thumbs.db
 
 # Agent scratch directories
 .agents/
+credentials/
+*.p12
+*.jks
+*.keystore
