@@ -1,3 +1,7 @@
+jest.mock('react-native', () => ({
+  Platform: { OS: 'android', Version: 36 },
+}));
+
 let mockStorage: Record<string, string> = {};
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: jest.fn(async (key: string) => mockStorage[key] || null),

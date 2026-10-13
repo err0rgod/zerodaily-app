@@ -15,6 +15,7 @@ import {
 } from '../types';
 
 import { ENDPOINTS, FIREBASE_AUTH_ENDPOINTS } from './endpoints';
+import { APP_USER_AGENT, getDeviceId } from '../utils/device';
 
 const REQUEST_TIMEOUT_MS = 6000;
 
@@ -31,7 +32,7 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}): Promise
       signal: controller.signal,
       headers: {
         Accept: 'application/json',
-        'User-Agent': 'ZeroDaily-Mobile/1.0',
+        'User-Agent': APP_USER_AGENT,
         ...(options.headers || {}),
       },
     });
@@ -461,10 +462,10 @@ export async function loginWithFirebase(
  * Conforms to POST /api/v1/auth/guest.
  */
 export async function createGuestSession(
-  deviceId?: string,
   initialPreferences?: Record<string, boolean>
 ): Promise<AuthResponse> {
   try {
+    const deviceId = await getDeviceId();
     const response = await fetchWithTimeout(ENDPOINTS.AUTH_GUEST, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

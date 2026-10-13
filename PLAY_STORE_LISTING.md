@@ -257,7 +257,7 @@ Under Google Play's mandatory Data Safety policy, developers must accurately dec
 | **Personal Info** | **Name** | **YES** | **NO** | **NO** | **Optional** | • App functionality<br>• Account management |
 | **Personal Info** | **Email address** | **YES** | **NO** | **NO** | **Optional** | • App functionality<br>• Account management |
 | **Personal Info** | **User IDs** | **YES** | **NO** | **NO** | **Required** | • App functionality<br>• Account management |
-| **Device or other IDs** | **Device or other IDs** (FCM Push Token) | **YES** | **NO** | **NO** | **Optional** | • App functionality (Push Notifications) |
+| **Device or other IDs** | **Device or other IDs** (FCM Push Token, Android ID) | **YES** | **NO** | **NO** | **Optional** | • App functionality (Push Notifications) |
 | **App info and performance** | **Crash logs & Diagnostics** | **YES** | **NO** | **NO** | **Required** | • Analytics<br>• App functionality |
 | **App info and performance** | **App interactions** (Reading Dwell & Swipes) | **YES** | **NO** | **NO** | **Required** | • App functionality<br>• Personalization |
 | **Location** | **Approximate location** (country / region / city derived from IP address) | **YES** | **NO** | **NO** | **Required** | • Analytics<br>• Fraud prevention, security & compliance |
@@ -300,6 +300,15 @@ Under Google Play's mandatory Data Safety policy, developers must accurately dec
 - **Is this data collection required or optional?** **Optional** (Users can deny `POST_NOTIFICATIONS` permission; the app continues full functionality without push alerts).
 - **Purposes for collection:**
   - `App functionality`: Dispatching breaking news alerts based on subscribed category topics (`topic_cybersec`, `topic_ai`, etc.).
+
+#### D2. Device or Other Identifiers: Android ID (guest continuity)
+- **Is this data collected?** **YES**
+- **Is this data shared?** **NO**
+- **Is this data processed ephemerally?** **NO** (Sent once when a guest session is created; the server stores it on the guest record and derives a stable guest ID from it with a keyed hash).
+- **Is this data collection required or optional?** **Required** (Lets a reinstalled app continue the same guest profile instead of creating a new account each time).
+- **Purposes for collection:**
+  - `App functionality`: Restoring the same guest profile, bookmarks and feed tuning on the same device.
+  - `Fraud prevention, security & compliance`: Limiting automated mass creation of guest accounts.
 
 #### E. App Info and Performance: Crash Logs & Diagnostics
 - **Is this data collected?** **YES**
