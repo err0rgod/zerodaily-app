@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { fetchFeed } from '../api/client';
+import { CATEGORY_LIST } from '../constants/categories';
 import { Article, CategoryKey } from '../types';
 import { rankArticlesForUser } from '../utils/personalization';
 import { readingTracker } from '../utils/readingTracker';
@@ -51,6 +52,14 @@ interface FeedState {
 async function getCachedFeed(category: CategoryKey): Promise<{ payload: FeedCachePayload | null; isFresh: boolean }> {
   try {
     const raw = await AsyncStorage.getItem(`${STORAGE_CACHE_KEY_PREFIX}${category}`);
+    return parseCachedFeed(raw);
+  } catch {
+    return { payload: null, isFresh: false };
+  }
+}
+
+function parseCachedFeed(raw: string | null): { payload: FeedCachePayload | null; isFresh: boolean } {
+  try {
     if (!raw) return { payload: null, isFresh: false };
 
     const parsed = JSON.parse(raw);
@@ -87,6 +96,32 @@ async function getCachedFeed(category: CategoryKey): Promise<{ payload: FeedCach
 }
 
 /**
+ * In-memory copy of the last feed written per category, so switching back to a recently
+ * viewed category can render its cards synchronously instead of flashing the old category.
+ */
+const memoryFeeds = new Map<CategoryKey, FeedCachePayload>();
+let memoryFeedsWarmed = false;
+
+/** Loads every category's fresh disk cache into memory once, so first-time switches are instant. */
+async function warmMemoryFeeds(): Promise<void> {
+  if (memoryFeedsWarmed) return;
+  memoryFeedsWarmed = true;
+  try {
+    const keys = CATEGORY_LIST.map((c) => `${STORAGE_CACHE_KEY_PREFIX}${c.key}`);
+    const entries = await AsyncStorage.multiGet(keys);
+    entries.forEach(([key, raw]) => {
+      const category = key.slice(STORAGE_CACHE_KEY_PREFIX.length) as CategoryKey;
+      const { payload, isFresh } = parseCachedFeed(raw);
+      if (isFresh && payload && !memoryFeeds.has(category)) {
+        memoryFeeds.set(category, payload);
+      }
+    });
+  } catch {
+    // Memory warm-up is best effort
+  }
+}
+
+/**
  * Saves feed to local storage with timestamp for 15-minute TTL validation.
  */
 async function setCachedFeed(
@@ -102,6 +137,7 @@ async function setCachedFeed(
       cursor,
       hasMore,
     };
+    memoryFeeds.set(category, payload);
     await AsyncStorage.setItem(`${STORAGE_CACHE_KEY_PREFIX}${category}`, JSON.stringify(payload));
   } catch {
     // Disk write fallback
@@ -209,8 +245,30 @@ export const useFeedStore = create<FeedState>((set, get) => ({
     const shouldKeepNotif = currentNotif && (category === 'all' || currentNotif.category === category);
     const activeNotif = shouldKeepNotif ? currentNotif : null;
 
+    // 0. Recently viewed in this session: swap the cards in the same update as the category,
+    //    so the deck never renders the previous category's articles under the new one.
+    const memory = memoryFeeds.get(category);
+    if (memory && memory.data.length > 0 && Date.now() - memory.timestamp < CACHE_TTL_MS) {
+      let unread = readingTracker.filterUnreadArticles(memory.data);
+      const isCaughtUp = unread.length === 0;
+      if (isCaughtUp) unread = memory.data;
+      set({
+        category,
+        currentIndex: 0,
+        articles: personalizeAndMerge(unread, activeNotif, category),
+        isLoading: false,
+        cursor: memory.cursor ?? null,
+        hasMore: memory.hasMore ?? true,
+        isAllCaughtUp: isCaughtUp,
+        activeNotificationArticle: activeNotif,
+      });
+      return;
+    }
+
+    // Otherwise clear the deck (the loader shows) rather than keep the old category's cards.
     set({
       category,
+      articles: [],
       currentIndex: 0,
       isLoading: true,
       cursor: null,
@@ -223,6 +281,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
 
     // 1. If cache is fresh (< 15 minutes old), restore from disk cache
     const { payload, isFresh } = await getCachedFeed(category);
+    if (get().category !== category) return; // user already moved on to another category
     if (isFresh && payload && payload.data.length > 0) {
       const notif = get().activeNotificationArticle;
       let unread = readingTracker.filterUnreadArticles(payload.data);
@@ -242,6 +301,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
         isCaughtUp = true;
       }
 
+      if (get().category !== category) return;
       const displayArticles = personalizeAndMerge(unread, notif, category);
       set({
         articles: displayArticles,
@@ -255,8 +315,24 @@ export const useFeedStore = create<FeedState>((set, get) => ({
     }
 
     // 2. Cache is older than 15 minutes (or empty) -> fetch fresh from web
+    // Falls back to the stale disk cache when the network is unavailable.
+    const showStaleCache = () => {
+      if (get().category !== category) return;
+      if (payload && payload.data.length > 0) {
+        set({
+          articles: personalizeAndMerge(payload.data, get().activeNotificationArticle, category),
+          cursor: payload.cursor ?? null,
+          hasMore: payload.hasMore ?? true,
+          isLoading: false,
+        });
+      } else {
+        set({ isLoading: false });
+      }
+    };
+
     try {
       const res = await fetchFeed(category);
+      if (get().category !== category) return;
       if (res.data && res.data.length > 0) {
         const notif = get().activeNotificationArticle;
         let unread = readingTracker.filterUnreadArticles(res.data);
@@ -276,6 +352,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
           isCaughtUp = true;
         }
 
+        if (get().category !== category) return;
         const displayArticles = personalizeAndMerge(unread, notif, category);
         set({
           articles: displayArticles,
@@ -286,10 +363,10 @@ export const useFeedStore = create<FeedState>((set, get) => ({
         });
         await setCachedFeed(category, displayArticles, cursor, hasMore);
       } else {
-        set({ isLoading: false });
+        showStaleCache();
       }
     } catch {
-      set({ isLoading: false });
+      showStaleCache();
     }
   },
 
@@ -315,6 +392,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
 
     set({ isLoading: true, currentIndex: 0 });
     await readingTracker.ensureLoaded();
+    void warmMemoryFeeds();
 
     // 1. Check local disk cache
     const { payload, isFresh } = await getCachedFeed(category);

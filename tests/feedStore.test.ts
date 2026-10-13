@@ -302,5 +302,31 @@ describe('FeedStore 30-Minute Cache TTL & Chronological Consistency', () => {
       expect.arrayContaining([mockApiArticles[0].id, mockApiArticles[1].id])
     );
   });
+
+  test('setCategory never keeps showing the previous category cards while loading', async () => {
+    useFeedStore.setState({ category: 'all', articles: [mockApiArticles[0]] });
+
+    const pending = useFeedStore.getState().setCategory('robotics');
+    const during = useFeedStore.getState();
+    expect(during.category).toBe('robotics');
+    expect(during.articles).toEqual([]);
+    expect(during.isLoading).toBe(true);
+
+    await pending;
+    expect(useFeedStore.getState().articles.length).toBe(2);
+    expect(useFeedStore.getState().isLoading).toBe(false);
+  });
+
+  test('setCategory restores a recently viewed category synchronously', async () => {
+    await useFeedStore.getState().setCategory('hardware');
+    await useFeedStore.getState().setCategory('programming');
+
+    const pending = useFeedStore.getState().setCategory('hardware');
+    const during = useFeedStore.getState();
+    expect(during.category).toBe('hardware');
+    expect(during.articles.length).toBe(2);
+    expect(during.isLoading).toBe(false);
+    await pending;
+  });
 });
 

@@ -26,7 +26,8 @@ export const DomainIcon: React.FC<DomainIconProps> = ({
 }) => {
   switch (category) {
     case 'all':
-      return <Flame size={size} color={color} strokeWidth={strokeWidth} />;
+      // The Hot feed's label already carries the 🔥 emoji, so it gets no second icon.
+      return null;
     case 'cybersec':
       return <Shield size={size} color={color} strokeWidth={strokeWidth} />;
     case 'ai':

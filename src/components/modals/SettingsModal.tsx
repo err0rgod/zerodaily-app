@@ -173,36 +173,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                       </View>
                     </View>
                   </View>
-
-                  <View style={styles.accountActionsRow}>
-                    <TouchableOpacity
-                      activeOpacity={0.75}
-                      onPress={handleSignOut}
-                      disabled={isLoading}
-                      style={[
-                        styles.signOutBtn,
-                        { borderColor: `${colors.textSecondary}40`, backgroundColor: `${colors.textSecondary}10` },
-                        isLoading && { opacity: 0.6 },
-                      ]}
-                    >
-                      <LogOut size={15} color={colors.textSecondary} />
-                      <Text style={[styles.signOutBtnText, { color: colors.textSecondary }]}>Sign Out</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      activeOpacity={0.75}
-                      onPress={handleDeleteAccount}
-                      disabled={isLoading}
-                      style={[
-                        styles.deleteAccountBtn,
-                        { borderColor: `${colors.danger}40`, backgroundColor: `${colors.danger}10` },
-                        isLoading && { opacity: 0.6 },
-                      ]}
-                    >
-                      <Trash2 size={15} color={colors.danger} />
-                      <Text style={[styles.deleteAccountBtnText, { color: colors.danger }]}>Delete Account</Text>
-                    </TouchableOpacity>
-                  </View>
                 </View>
               ) : (
                 <View style={styles.accountContent}>
@@ -304,6 +274,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
               );
             })}
 
+            {/* Section: Account actions (signed-in only), kept at the bottom above legal */}
+            {isAuthenticated && user && (
+              <>
+                <Text style={[styles.sectionHeader, { color: colors.textMuted, marginTop: 10 }]}>ACCOUNT</Text>
+                <View style={styles.accountActionsRow}>
+                  <TouchableOpacity
+                    activeOpacity={0.75}
+                    onPress={handleSignOut}
+                    disabled={isLoading}
+                    style={[
+                      styles.signOutBtn,
+                      { borderColor: `${colors.textSecondary}40`, backgroundColor: `${colors.textSecondary}10` },
+                      isLoading && { opacity: 0.6 },
+                    ]}
+                  >
+                    <LogOut size={15} color={colors.textSecondary} />
+                    <Text style={[styles.signOutBtnText, { color: colors.textSecondary }]}>Sign Out</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    activeOpacity={0.75}
+                    onPress={handleDeleteAccount}
+                    disabled={isLoading}
+                    style={[
+                      styles.deleteAccountBtn,
+                      { borderColor: `${colors.danger}40`, backgroundColor: `${colors.danger}10` },
+                      isLoading && { opacity: 0.6 },
+                    ]}
+                  >
+                    <Trash2 size={15} color={colors.danger} />
+                    <Text style={[styles.deleteAccountBtnText, { color: colors.danger }]}>Delete Account</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+
             {/* Section: Legal & Policies */}
             <Text style={[styles.sectionHeader, { color: colors.textMuted, marginTop: 10 }]}>LEGAL & POLICIES</Text>
 
@@ -339,7 +345,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
             <View style={styles.aboutFooter}>
               <AlertCircle size={14} color={colors.textMuted} />
               <Text style={[styles.aboutText, { color: colors.textMuted }]}>
-                ZeroDaily Mobile • v1.6.4
+                ZeroDaily Mobile • v1.7.0
               </Text>
             </View>
           </ScrollView>
@@ -435,7 +441,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginTop: 4,
+    marginBottom: 14,
   },
   signOutBtn: {
     flex: 1,

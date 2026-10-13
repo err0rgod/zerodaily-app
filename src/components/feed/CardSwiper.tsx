@@ -58,7 +58,6 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     articles,
     category,
     currentIndex,
-    setCurrentIndex,
     refreshFeed,
     isRefreshing,
     loadInitialFeed,
@@ -92,8 +91,17 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
   windowDimRef.current = windowDim;
 
   const isAnimatingRef = useRef<boolean>(false);
-  const panY = useRef(new Animated.Value(0)).current;
+  /**
+   * Vertical drag offset. A fresh value (already at 0) is swapped in together with each index
+   * change, so the re-rendered deck binds to the reset position in the same commit. Resetting the
+   * old value after the commit leaves a frame where the new card is still off-screen (flicker).
+   */
+  const panYRef = useRef(new Animated.Value(0));
+  const panY = panYRef.current;
   const panX = useRef(new Animated.Value(0)).current;
+
+  /** Horizontal start offset for the incoming card after a domain switch, consumed on re-render. */
+  const pendingDomainEnterXRef = useRef<number | null>(null);
 
   // Active gesture lock: prevents diagonal wobbling or accidental vertical scrolls
   const gestureAxisRef = useRef<'none' | 'vertical' | 'horizontal'>('none');
@@ -136,12 +144,21 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     return Math.max(windowDimRef.current.height - 110, 400);
   }, []);
 
+  // Moves to a new card index with a fresh, already-reset vertical offset (see panYRef).
+  const commitIndex = useCallback((index: number) => {
+    panYRef.current = new Animated.Value(0);
+    useFeedStore.getState().setCurrentIndex(index);
+  }, []);
+
   // Initial feed load if store is empty or has only a solitary notification card and not already loading
+  // (once per category, so an offline failure doesn't retry in a tight loop)
+  const autoLoadedCategoryRef = useRef<CategoryKey | null>(null);
   useEffect(() => {
-    if (articles.length <= 1 && !isLoading) {
+    if (articles.length <= 1 && !isLoading && autoLoadedCategoryRef.current !== category) {
+      autoLoadedCategoryRef.current = category;
       loadInitialFeed();
     }
-  }, [articles.length, isLoading, loadInitialFeed]);
+  }, [articles.length, isLoading, category, loadInitialFeed]);
 
   // Warm-up disk & memory image cache for category fallback pools
   useEffect(() => {
@@ -240,14 +257,31 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
 
   // Reset animation position synchronously before paint whenever index or category changes
   useLayoutEffect(() => {
-    panY.stopAnimation();
-    panY.setValue(0);
+    panYRef.current.stopAnimation();
+    panYRef.current.setValue(0);
     panX.stopAnimation();
-    panX.setValue(0);
     canReleaseRef.current = false;
     setIsPulling(false);
     setCanRelease(false);
-  }, [category, currentIndex, panY, panX]);
+
+    // After a domain switch, slide the new category's card in only once it has rendered,
+    // so the previous category's card never flashes back on screen.
+    const enterFromX = pendingDomainEnterXRef.current;
+    if (enterFromX === null) {
+      panX.setValue(0);
+      return;
+    }
+    pendingDomainEnterXRef.current = null;
+    panX.setValue(enterFromX);
+    Animated.spring(panX, {
+      toValue: 0,
+      friction: 8,
+      tension: 55,
+      useNativeDriver: Platform.OS !== 'web',
+    }).start(() => {
+      isAnimatingRef.current = false;
+    });
+  }, [category, currentIndex, panX]);
 
   // Clean up banner timer on unmount
   useEffect(() => {
@@ -276,16 +310,16 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     if (isAnimatingRef.current || curr >= total - 1) return;
     isAnimatingRef.current = true;
 
-    Animated.timing(panY, {
+    Animated.timing(panYRef.current, {
       toValue: -height,
       duration: 230,
       easing: Easing.out(Easing.quad),
       useNativeDriver: Platform.OS !== 'web',
     }).start(() => {
-      setCurrentIndex(curr + 1);
+      commitIndex(curr + 1);
       isAnimatingRef.current = false;
     });
-  }, [getCardHeight, panY, setCurrentIndex]);
+  }, [getCardHeight, commitIndex]);
 
   // Programmatic navigation to previous card
   const goToPrevCard = useCallback(() => {
@@ -300,16 +334,16 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     }
 
     isAnimatingRef.current = true;
-    Animated.timing(panY, {
+    Animated.timing(panYRef.current, {
       toValue: height,
       duration: 230,
       easing: Easing.out(Easing.quad),
       useNativeDriver: Platform.OS !== 'web',
     }).start(() => {
-      setCurrentIndex(curr - 1);
+      commitIndex(curr - 1);
       isAnimatingRef.current = false;
     });
-  }, [getCardHeight, panY, setCurrentIndex, refreshFeed]);
+  }, [getCardHeight, commitIndex, refreshFeed]);
 
   // Shows temporary floating announcement banner when a domain is switched
   const showDomainChangeBanner = useCallback(
@@ -380,28 +414,19 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
         // 2. Announce new domain with floating badge
         showDomainChangeBanner(nextCat);
 
-        // 3. Switch active category
+        // 3. Queue the incoming card's entry; the layout effect springs it in once the
+        //    new category has rendered (the outgoing card stays off-screen until then).
+        pendingDomainEnterXRef.current = enterFromX;
+
+        // 4. Switch active category
         if (onSelectCategory) {
           onSelectCategory(nextCat.key);
         } else {
           await setCategory(nextCat.key);
         }
-
-        // 4. Position incoming card on opposite side and spring in
-        panX.setValue(enterFromX);
-        panY.setValue(0);
-
-        Animated.spring(panX, {
-          toValue: 0,
-          friction: 8,
-          tension: 55,
-          useNativeDriver: Platform.OS !== 'web',
-        }).start(() => {
-          isAnimatingRef.current = false;
-        });
       });
     },
-    [windowDim.width, panX, panY, onSelectCategory, setCategory, showDomainChangeBanner]
+    [windowDim.width, panX, onSelectCategory, setCategory, showDomainChangeBanner]
   );
 
   const goToNextDomain = useCallback(() => {
@@ -495,7 +520,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
       },
 
       onPanResponderGrant: () => {
-        panY.stopAnimation();
+        panYRef.current.stopAnimation();
         panX.stopAnimation();
         isAnimatingRef.current = false;
         gestureAxisRef.current = 'none';
@@ -521,7 +546,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
 
         if (gestureAxisRef.current === 'vertical') {
           setReleaseReady(gesture.dy > PULL_REFRESH_TRIGGER_PX);
-          panY.setValue(gesture.dy);
+          panYRef.current.setValue(gesture.dy);
         } else if (gestureAxisRef.current === 'horizontal') {
           // Use refs to get current values, not stale closures
           const currentCategory = categoryRef.current;
@@ -601,24 +626,24 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
 
           if (isUpSwipe && curr < total - 1) {
             isAnimatingRef.current = true;
-            Animated.timing(panY, {
+            Animated.timing(panYRef.current, {
               toValue: -height,
               duration: 220,
               easing: Easing.out(Easing.quad),
               useNativeDriver: Platform.OS !== 'web',
             }).start(() => {
-              setCurrentIndex(curr + 1);
+              commitIndex(curr + 1);
               isAnimatingRef.current = false;
             });
           } else if (isDownSwipe && curr > 0) {
             isAnimatingRef.current = true;
-            Animated.timing(panY, {
+            Animated.timing(panYRef.current, {
               toValue: height,
               duration: 220,
               easing: Easing.out(Easing.quad),
               useNativeDriver: Platform.OS !== 'web',
             }).start(() => {
-              setCurrentIndex(curr - 1);
+              commitIndex(curr - 1);
               isAnimatingRef.current = false;
             });
           } else {
@@ -628,7 +653,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
               }
               refreshFeed();
             }
-            Animated.spring(panY, {
+            Animated.spring(panYRef.current, {
               toValue: 0,
               friction: 7,
               tension: 50,
@@ -639,7 +664,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
           }
         } else {
           Animated.parallel([
-            Animated.spring(panY, {
+            Animated.spring(panYRef.current, {
               toValue: 0,
               friction: 7,
               tension: 50,
@@ -663,7 +688,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
         setIsPulling(false);
         setReleaseReady(false);
         Animated.parallel([
-          Animated.spring(panY, {
+          Animated.spring(panYRef.current, {
             toValue: 0,
             friction: 7,
             tension: 50,
