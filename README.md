@@ -75,9 +75,9 @@ Signing keys are never committed. CI reads them from GitHub Actions secrets:
 | Secret | Purpose |
 | :--- | :--- |
 | `ANDROID_RELEASE_KEYSTORE_BASE64` / `ANDROID_RELEASE_KEYSTORE_PASSWORD` | App signing key (alias `zerodaily-release`). Signs the GitHub/website APK; registered with Play App Signing so Play and sideload builds share a signature. |
-| `ANDROID_UPLOAD_KEYSTORE_BASE64` / `ANDROID_UPLOAD_KEYSTORE_PASSWORD` | Upload key (alias `zerodaily-upload`). Signs the `.aab` uploaded to Google Play. |
+| `ANDROID_UPLOAD_KEYSTORE_BASE64` / `ANDROID_UPLOAD_KEYSTORE_PASSWORD` | Upload key (alias `zerodaily-upload`). Not registered in Play Console, so currently unused: the `.aab` is signed with the app signing key, which Play accepts as the upload key. |
 
-Pushing a `v*` tag builds both, publishes `ZeroDaily.apk` as a GitHub Release, and uploads `ZeroDaily.aab` as a workflow artifact for the Play Console. A manual `workflow_dispatch` run builds without publishing unless `publish_release` is ticked. Bump `android.versionCode` in `app.json` for every Play upload.
+Pushing a `v*` tag builds both (signed with `zerodaily-release`), publishes `ZeroDaily.apk` as a GitHub Release, and uploads `ZeroDaily.aab` as a workflow artifact for the Play Console. A manual `workflow_dispatch` run builds without publishing unless `publish_release` is ticked. Bump `android.versionCode` in `app.json` for every Play upload.
 
 ### Option B: Run Locally with Expo
 

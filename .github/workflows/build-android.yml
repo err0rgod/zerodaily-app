@@ -111,16 +111,18 @@ jobs:
         working-directory: android
         run: chmod +x gradlew
 
-      - name: Build Play Store App Bundle (upload key)
+      # Play Console registered zerodaily-release as both the app signing and the upload key,
+      # so the bundle is signed with it too (the separate upload key is not registered).
+      - name: Build Play Store App Bundle (app signing key)
         if: ${{ github.event.inputs.build_type != 'debug' }}
         working-directory: android
         env:
-          STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
         run: |
           ./gradlew bundleRelease --no-daemon --stacktrace \
-            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/upload.p12" \
+            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/release.p12" \
             -Pandroid.injected.signing.store.password="$STORE_PASSWORD" \
-            -Pandroid.injected.signing.key.alias=zerodaily-upload \
+            -Pandroid.injected.signing.key.alias=zerodaily-release \
             -Pandroid.injected.signing.key.password="$STORE_PASSWORD"
 
       - name: Assemble Standalone Release APK (app signing key)
