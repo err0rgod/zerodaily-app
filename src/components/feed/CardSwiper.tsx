@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { Check, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react-native';
+import { Check, RotateCcw } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -25,22 +25,21 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
-import { CATEGORIES, CATEGORY_LIST, getDynamicFallbackImage } from '../../constants/categories';
+import { CATEGORIES, getDynamicFallbackImage } from '../../constants/categories';
 import { useFeedStore } from '../../store/feedStore';
 import { useTheme } from '../../store/themeStore';
 import { useUserStore } from '../../store/userStore';
-import { Article, CategoryKey, CategoryMeta } from '../../types';
+import { Article, CategoryKey } from '../../types';
 import { readingTracker } from '../../utils/readingTracker';
 import { notificationSessionTracker } from '../../services/notificationService';
 import { NewsCard } from './NewsCard';
 import { ScreenGlareLoader } from './ScreenGlareLoader';
 
-import { DomainIcon } from '../common/DomainIcon';
-
 interface CardSwiperProps {
   onOpenFullRoast: (article: Article) => void;
   onOpenSourceLink: (url: string) => void;
   onOpenImageViewer?: (imageUri: string, heading: string, category: CategoryKey) => void;
+  /** Kept for API compatibility; topics are switched from the category pills. */
   onSelectCategory?: (category: CategoryKey) => void;
 }
 
@@ -50,17 +49,16 @@ const PULL_REFRESH_TRIGGER_PX = 55;
 const MAX_PULL_PX = 90;
 /** Fling speeds (px/s) that complete a swipe even below the distance threshold. */
 const VERTICAL_FLING_VELOCITY = 300;
-const HORIZONTAL_FLING_VELOCITY = 400;
 /** Cards kept mounted around the current one (previous card + two upcoming). */
 const CARDS_BEHIND = 1;
 const CARDS_AHEAD = 2;
 
 const SWIPE_TIMING = { duration: 220, easing: Easing.out(Easing.quad) };
 const SETTLE_SPRING = { damping: 18, stiffness: 180 };
-const ENTER_SPRING = { damping: 16, stiffness: 140 };
 
 /**
- * Card deck driven entirely on the UI thread (Reanimated + Gesture Handler).
+ * Vertical card deck driven entirely on the UI thread (Reanimated + Gesture Handler).
+ * Topics are switched with the category pills (horizontal swiping is disabled).
  *
  * `position` is a continuous card index: swiping up animates it from n to n+1. Each mounted card
  * derives its transform from `index - position`, so committing the new index to the store after
@@ -71,7 +69,6 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
   onOpenFullRoast,
   onOpenSourceLink,
   onOpenImageViewer,
-  onSelectCategory,
 }) => {
   const {
     articles,
@@ -83,7 +80,6 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     loadInitialFeed,
     isLoading,
     isAllCaughtUp,
-    setCategory,
   } = useFeedStore();
 
   const { colors, isDark } = useTheme();
@@ -92,35 +88,20 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
   const [containerHeight, setContainerHeight] = useState<number>(0);
   const cardHeight = containerHeight > 60 ? containerHeight : Math.max(windowDim.height - 110, 400);
 
-  const catIndex = CATEGORY_LIST.findIndex((c) => c.key === category);
-  const nextCat = catIndex < CATEGORY_LIST.length - 1 ? CATEGORY_LIST[catIndex + 1] : null;
-  const prevCat = catIndex > 0 ? CATEGORY_LIST[catIndex - 1] : null;
-
   // ---- UI-thread state ---------------------------------------------------------------------
   const position = useSharedValue(currentIndex); // continuous card index
   const indexSV = useSharedValue(currentIndex); // committed index, as seen by the gesture
   const totalSV = useSharedValue(articles.length);
-  const catIndexSV = useSharedValue(catIndex);
   const heightSV = useSharedValue(cardHeight);
-  const widthSV = useSharedValue(windowDim.width);
-  const translateX = useSharedValue(0); // horizontal drag of the top card (category switch)
   const pull = useSharedValue(0); // pull-to-refresh offset of the first card
-  const axis = useSharedValue(0); // 0 = undecided, 1 = vertical, 2 = horizontal
-  const thresholdHit = useSharedValue(false);
   const animating = useSharedValue(false);
 
   useEffect(() => {
     totalSV.value = articles.length;
   }, [articles.length, totalSV]);
   useEffect(() => {
-    catIndexSV.value = catIndex;
-  }, [catIndex, catIndexSV]);
-  useEffect(() => {
     heightSV.value = cardHeight;
   }, [cardHeight, heightSV]);
-  useEffect(() => {
-    widthSV.value = windowDim.width;
-  }, [windowDim.width, widthSV]);
 
   // Index changes we committed from a swipe are already on screen; anything else (category
   // switch, refresh, Home tab, notification) jumps the deck to the new index.
@@ -263,86 +244,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
     }
   };
 
-  // ---- Floating domain change announcement toast ------------------------------------------
-  const [domainBanner, setDomainBanner] = useState<CategoryMeta | null>(null);
-  const bannerOpacity = useSharedValue(0);
-  const bannerTranslateY = useSharedValue(-20);
-  const bannerScale = useSharedValue(0.9);
-  const domainBannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (domainBannerTimerRef.current) {
-        clearTimeout(domainBannerTimerRef.current);
-      }
-    };
-  }, []);
-
-  const showDomainChangeBanner = useCallback(
-    (cat: CategoryMeta) => {
-      if (domainBannerTimerRef.current) {
-        clearTimeout(domainBannerTimerRef.current);
-      }
-      setDomainBanner(cat);
-      bannerOpacity.value = 0;
-      bannerTranslateY.value = -20;
-      bannerScale.value = 0.9;
-      bannerOpacity.value = withTiming(1, { duration: 180, easing: Easing.out(Easing.quad) });
-      bannerTranslateY.value = withSpring(0, ENTER_SPRING);
-      bannerScale.value = withSpring(1, ENTER_SPRING);
-
-      domainBannerTimerRef.current = setTimeout(() => {
-        bannerOpacity.value = withTiming(0, { duration: 220, easing: Easing.in(Easing.quad) }, (finished) => {
-          if (finished) scheduleOnRN(setDomainBanner, null);
-        });
-      }, 1400);
-    },
-    [bannerOpacity, bannerTranslateY, bannerScale]
-  );
-
-  // ---- Category (domain) switch ------------------------------------------------------------
-  /** Where the incoming category's card starts its slide-in; consumed once its cards render. */
-  const pendingEnterXRef = useRef<number | null>(null);
-
-  const switchDomain = useCallback(
-    (targetCatIndex: number, enterFromX: number) => {
-      const target = CATEGORY_LIST[targetCatIndex];
-      if (!target) {
-        animating.value = false;
-        translateX.value = withSpring(0, SETTLE_SPRING);
-        return;
-      }
-      if (Platform.OS !== 'web') {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-      }
-      pendingEnterXRef.current = enterFromX;
-      showDomainChangeBanner(target);
-      if (onSelectCategory) {
-        onSelectCategory(target.key);
-      } else {
-        setCategory(target.key);
-      }
-    },
-    [animating, translateX, showDomainChangeBanner, onSelectCategory, setCategory]
-  );
-
-  // The outgoing card stays off-screen until the new category's cards are rendered,
-  // then the new top card springs in, so the previous category never flashes back.
-  useEffect(() => {
-    const enterFromX = pendingEnterXRef.current;
-    if (enterFromX === null || isLoading) return;
-    pendingEnterXRef.current = null;
-    translateX.value = enterFromX;
-    translateX.value = withSpring(0, ENTER_SPRING, () => {
-      animating.value = false;
-    });
-  }, [category, articles, isLoading, translateX, animating]);
-
   // ---- JS-side helpers called from the gesture worklets -----------------------------------
-  const selectionHaptic = useCallback(() => {
-    if (Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {});
-  }, []);
-
   const pullRefresh = useCallback(() => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -354,137 +256,72 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
   const pan = useMemo(
     () =>
       Gesture.Pan()
-        // Let taps through to the card's buttons; claim the touch only once it is a swipe.
-        .activeOffsetX([-12, 12])
+        // Vertical only: let taps through to the card's buttons and ignore sideways drags.
         .activeOffsetY([-12, 12])
-        .onStart(() => {
-          'worklet';
-          axis.value = 0;
-          thresholdHit.value = false;
-        })
+        .failOffsetX([-24, 24])
         .onUpdate((e) => {
           'worklet';
           if (animating.value) return;
 
-          // Lock the axis on the first movement so diagonal drags don't wobble.
-          if (axis.value === 0) {
-            axis.value = Math.abs(e.translationX) > Math.abs(e.translationY) ? 2 : 1;
+          const base = indexSV.value;
+          if (base === 0 && e.translationY > 0) {
+            // Pull-to-refresh on the first card.
+            position.value = 0;
+            pull.value = Math.min(e.translationY * 0.6, MAX_PULL_PX);
+            return;
           }
-
-          if (axis.value === 1) {
-            const base = indexSV.value;
-            if (base === 0 && e.translationY > 0) {
-              // Pull-to-refresh on the first card.
-              position.value = 0;
-              pull.value = Math.min(e.translationY * 0.6, MAX_PULL_PX);
-              return;
-            }
-            pull.value = 0;
-            const last = Math.max(totalSV.value - 1, 0);
-            let p = base - e.translationY / heightSV.value;
-            p = Math.min(Math.max(p, base - 1), base + 1);
-            if (p > last) p = last + (p - last) * 0.2; // rubber-band past the last card
-            position.value = Math.max(p, 0);
-          } else {
-            const lastCat = CATEGORY_LIST.length - 1;
-            let x = e.translationX;
-            const atEdge = (catIndexSV.value === 0 && x > 0) || (catIndexSV.value === lastCat && x < 0);
-            if (atEdge) x *= 0.22; // rubber-band at the first / last topic
-            translateX.value = x;
-
-            const reached = !atEdge && Math.abs(x) >= Math.min(widthSV.value * 0.22, 90);
-            if (reached !== thresholdHit.value) {
-              thresholdHit.value = reached;
-              if (reached) scheduleOnRN(selectionHaptic);
-            }
-          }
+          pull.value = 0;
+          const last = Math.max(totalSV.value - 1, 0);
+          let p = base - e.translationY / heightSV.value;
+          p = Math.min(Math.max(p, base - 1), base + 1);
+          if (p > last) p = last + (p - last) * 0.2; // rubber-band past the last card
+          position.value = Math.max(p, 0);
         })
         .onEnd((e) => {
           'worklet';
           if (animating.value) return;
 
-          if (axis.value === 1) {
-            const base = indexSV.value;
-            const last = totalSV.value - 1;
-            const threshold = Math.min(heightSV.value * 0.12, 80);
-            const isUp = e.translationY < -threshold || e.velocityY < -VERTICAL_FLING_VELOCITY;
-            const isDown = e.translationY > threshold || e.velocityY > VERTICAL_FLING_VELOCITY;
+          const base = indexSV.value;
+          const last = totalSV.value - 1;
+          const threshold = Math.min(heightSV.value * 0.12, 80);
+          const isUp = e.translationY < -threshold || e.velocityY < -VERTICAL_FLING_VELOCITY;
+          const isDown = e.translationY > threshold || e.velocityY > VERTICAL_FLING_VELOCITY;
 
-            if (isUp && base < last) {
-              animating.value = true;
-              position.value = withTiming(base + 1, SWIPE_TIMING, (finished) => {
-                if (finished) {
-                  indexSV.value = base + 1;
-                  scheduleOnRN(commitIndex, base + 1);
-                }
-                animating.value = false;
-              });
-            } else if (isDown && base > 0) {
-              animating.value = true;
-              position.value = withTiming(base - 1, SWIPE_TIMING, (finished) => {
-                if (finished) {
-                  indexSV.value = base - 1;
-                  scheduleOnRN(commitIndex, base - 1);
-                }
-                animating.value = false;
-              });
-            } else {
-              if (base === 0 && pull.value >= PULL_REFRESH_TRIGGER_PX) {
-                scheduleOnRN(pullRefresh);
+          if (isUp && base < last) {
+            animating.value = true;
+            position.value = withTiming(base + 1, SWIPE_TIMING, (finished) => {
+              if (finished) {
+                indexSV.value = base + 1;
+                scheduleOnRN(commitIndex, base + 1);
               }
-              position.value = withSpring(base, SETTLE_SPRING);
-              pull.value = withSpring(0, SETTLE_SPRING);
+              animating.value = false;
+            });
+          } else if (isDown && base > 0) {
+            animating.value = true;
+            position.value = withTiming(base - 1, SWIPE_TIMING, (finished) => {
+              if (finished) {
+                indexSV.value = base - 1;
+                scheduleOnRN(commitIndex, base - 1);
+              }
+              animating.value = false;
+            });
+          } else {
+            if (base === 0 && pull.value >= PULL_REFRESH_TRIGGER_PX) {
+              scheduleOnRN(pullRefresh);
             }
-          } else if (axis.value === 2) {
-            const width = widthSV.value;
-            const threshold = Math.min(width * 0.22, 90);
-            const cat = catIndexSV.value;
-            const isLeft = e.translationX < -threshold || e.velocityX < -HORIZONTAL_FLING_VELOCITY;
-            const isRight = e.translationX > threshold || e.velocityX > HORIZONTAL_FLING_VELOCITY;
-
-            if (isLeft && cat < CATEGORY_LIST.length - 1) {
-              animating.value = true;
-              translateX.value = withTiming(-width * 1.15, { duration: 180, easing: Easing.out(Easing.quad) }, () => {
-                scheduleOnRN(switchDomain, cat + 1, width * 0.35);
-              });
-            } else if (isRight && cat > 0) {
-              animating.value = true;
-              translateX.value = withTiming(width * 1.15, { duration: 180, easing: Easing.out(Easing.quad) }, () => {
-                scheduleOnRN(switchDomain, cat - 1, -width * 0.35);
-              });
-            } else {
-              translateX.value = withSpring(0, SETTLE_SPRING);
-            }
+            position.value = withSpring(base, SETTLE_SPRING);
+            pull.value = withSpring(0, SETTLE_SPRING);
           }
         })
         .onFinalize(() => {
           'worklet';
-          axis.value = 0;
-          thresholdHit.value = false;
           // A cancelled touch (e.g. a modal opened) must not leave the deck half-dragged.
           if (!animating.value) {
             if (position.value !== indexSV.value) position.value = withSpring(indexSV.value, SETTLE_SPRING);
             if (pull.value !== 0) pull.value = withSpring(0, SETTLE_SPRING);
-            if (translateX.value !== 0) translateX.value = withSpring(0, SETTLE_SPRING);
           }
         }),
-    [
-      axis,
-      thresholdHit,
-      animating,
-      indexSV,
-      position,
-      pull,
-      totalSV,
-      heightSV,
-      catIndexSV,
-      translateX,
-      widthSV,
-      selectionHaptic,
-      commitIndex,
-      pullRefresh,
-      switchDomain,
-    ]
+    [animating, indexSV, position, pull, totalSV, heightSV, commitIndex, pullRefresh]
   );
 
   // ---- Web desktop mouse wheel and arrow key shortcuts --------------------------------------
@@ -513,15 +350,6 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
       if (indexSV.value === 0) refreshFeed();
       else animateToCard(indexSV.value - 1);
     };
-    const goDomain = (dir: 1 | -1) => {
-      const target = catIndexSV.value + dir;
-      if (animating.value || target < 0 || target >= CATEGORY_LIST.length) return;
-      animating.value = true;
-      const width = widthSV.value;
-      translateX.value = withTiming(dir > 0 ? -width * 1.15 : width * 1.15, { duration: 180 }, () => {
-        scheduleOnRN(switchDomain, target, dir > 0 ? width * 0.35 : -width * 0.35);
-      });
-    };
 
     let lastWheelTime = 0;
     const handleWheel = (e: WheelEvent) => {
@@ -543,12 +371,6 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
       } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
         e.preventDefault();
         goPrev();
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        goDomain(1);
-      } else if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        goDomain(-1);
       }
     };
 
@@ -559,7 +381,7 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
       window.removeEventListener('wheel', handleWheel);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [animateToCard, refreshFeed, switchDomain, indexSV, totalSV, catIndexSV, animating, widthSV, translateX]);
+  }, [animateToCard, refreshFeed, indexSV, totalSV]);
 
   // ---- Overlay animations --------------------------------------------------------------------
   const pullBadgeStyle = useAnimatedStyle(() => ({
@@ -579,32 +401,6 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
   }));
   const caughtUpStyle = useAnimatedStyle(() => ({
     opacity: interpolate(pull.value, [0, 20], [1, 0], Extrapolation.CLAMP),
-  }));
-
-  const bannerStyle = useAnimatedStyle(() => ({
-    opacity: bannerOpacity.value,
-    transform: [{ translateY: bannerTranslateY.value }, { scale: bannerScale.value }],
-  }));
-
-  const nextPeekStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(translateX.value, [-85, -20, 0], [1, 0.3, 0], Extrapolation.CLAMP),
-    transform: [
-      { translateX: interpolate(translateX.value, [-100, 0], [0, 24], Extrapolation.CLAMP) },
-      { scale: interpolate(translateX.value, [-100, -25, 0], [1, 0.85, 0.7], Extrapolation.CLAMP) },
-    ],
-  }));
-  const prevPeekStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(translateX.value, [0, 20, 85], [0, 0.3, 1], Extrapolation.CLAMP),
-    transform: [
-      { translateX: interpolate(translateX.value, [0, 100], [-24, 0], Extrapolation.CLAMP) },
-      { scale: interpolate(translateX.value, [0, 25, 100], [0.7, 0.85, 1], Extrapolation.CLAMP) },
-    ],
-  }));
-  const edgeStartStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(translateX.value, [0, 15, 60], [0, 0.25, 0.85], Extrapolation.CLAMP),
-  }));
-  const edgeEndStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(translateX.value, [-60, -15, 0], [0.85, 0.25, 0], Extrapolation.CLAMP),
   }));
 
   // The deck stays mounted while a refresh is in flight.
@@ -690,107 +486,6 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
             </Animated.View>
           )}
 
-          {/* Floating Domain Switch Announcement Toast */}
-          {domainBanner && (
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.floatingDomainBanner,
-                {
-                  backgroundColor: isDark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.96)',
-                  borderColor: domainBanner.accentColor,
-                },
-                bannerStyle,
-              ]}
-            >
-              <DomainIcon category={domainBanner.key} size={16} color={domainBanner.accentColor} />
-              <Text style={[styles.bannerDomainTitle, { color: colors.textPrimary }]}>
-                {domainBanner.name}
-              </Text>
-            </Animated.View>
-          )}
-
-          {/* Next Domain Peek Indicator (appears on right edge when sliding left) */}
-          {nextCat && (
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.domainPeekBadge,
-                styles.domainPeekRight,
-                {
-                  backgroundColor: isDark ? 'rgba(15, 23, 42, 0.94)' : 'rgba(255, 255, 255, 0.95)',
-                  borderColor: nextCat.accentColor,
-                },
-                nextPeekStyle,
-              ]}
-            >
-              <DomainIcon category={nextCat.key} size={15} color={nextCat.accentColor} />
-              <Text style={[styles.peekCategoryName, { color: colors.textPrimary }]}>
-                {nextCat.name}
-              </Text>
-              <ChevronRight size={15} color={nextCat.accentColor} strokeWidth={2.5} />
-            </Animated.View>
-          )}
-
-          {/* Previous Domain Peek Indicator (appears on left edge when sliding right) */}
-          {prevCat && (
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.domainPeekBadge,
-                styles.domainPeekLeft,
-                {
-                  backgroundColor: isDark ? 'rgba(15, 23, 42, 0.94)' : 'rgba(255, 255, 255, 0.95)',
-                  borderColor: prevCat.accentColor,
-                },
-                prevPeekStyle,
-              ]}
-            >
-              <ChevronLeft size={15} color={prevCat.accentColor} strokeWidth={2.5} />
-              <DomainIcon category={prevCat.key} size={15} color={prevCat.accentColor} />
-              <Text style={[styles.peekCategoryName, { color: colors.textPrimary }]}>
-                {prevCat.name}
-              </Text>
-            </Animated.View>
-          )}
-
-          {/* At Start Edge Indicator */}
-          {catIndex === 0 && (
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.domainPeekBadge,
-                styles.domainPeekLeft,
-                {
-                  backgroundColor: isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.92)',
-                  borderColor: colors.border,
-                },
-                edgeStartStyle,
-              ]}
-            >
-              <Text style={[styles.peekCategoryName, { color: colors.textMuted }]}>First Topic</Text>
-            </Animated.View>
-          )}
-
-          {/* At End Edge Indicator */}
-          {catIndex === CATEGORY_LIST.length - 1 && (
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.domainPeekBadge,
-                styles.domainPeekRight,
-                {
-                  backgroundColor: isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.92)',
-                  borderColor: colors.border,
-                },
-                edgeEndStyle,
-              ]}
-            >
-              <Text style={[styles.peekCategoryName, { color: colors.textMuted }]}>Last Topic</Text>
-              <DomainIcon category="finance" size={14} color={colors.textMuted} />
-            </Animated.View>
-          )}
-
           {/* Card deck: each card keeps its React instance (keyed by article) while it is within
               the mounted window, so images never reload or blink between swipes. */}
           {mountedCards.map(({ article, index }) => (
@@ -802,10 +497,8 @@ export const CardSwiper: React.FC<CardSwiperProps> = ({
               cardHeight={cardHeight}
               veilColor={isDark ? '#000000' : '#475569'}
               position={position}
-              translateX={translateX}
               pull={pull}
               heightSV={heightSV}
-              widthSV={widthSV}
               onOpenFullRoast={onOpenFullRoast}
               onOpenSourceLink={onOpenSourceLink}
               onOpenImageViewer={onOpenImageViewer}
@@ -824,10 +517,8 @@ interface DeckCardProps {
   cardHeight: number;
   veilColor: string;
   position: SharedValue<number>;
-  translateX: SharedValue<number>;
   pull: SharedValue<number>;
   heightSV: SharedValue<number>;
-  widthSV: SharedValue<number>;
   onOpenFullRoast: (article: Article) => void;
   onOpenSourceLink: (url: string) => void;
   onOpenImageViewer?: (imageUri: string, heading: string, category: CategoryKey) => void;
@@ -847,10 +538,8 @@ const DeckCard: React.FC<DeckCardProps> = React.memo(
     cardHeight,
     veilColor,
     position,
-    translateX,
     pull,
     heightSV,
-    widthSV,
     onOpenFullRoast,
     onOpenSourceLink,
     onOpenImageViewer,
@@ -858,7 +547,6 @@ const DeckCard: React.FC<DeckCardProps> = React.memo(
     const cardStyle = useAnimatedStyle(() => {
       const d = index - position.value;
       const height = heightSV.value;
-      const width = widthSV.value;
 
       let translateY: number;
       let scale = 1;
@@ -874,20 +562,9 @@ const DeckCard: React.FC<DeckCardProps> = React.memo(
       }
       if (index === 0) translateY += pull.value;
 
-      // Only the card on top follows the horizontal category drag.
-      const x = Math.abs(d) < 0.5 ? translateX.value : 0;
-      const rotate = interpolate(x, [-width, 0, width], [-6, 0, 6], Extrapolation.CLAMP);
-      scale *= interpolate(x, [-width, 0, width], [0.93, 1, 0.93], Extrapolation.CLAMP);
-      opacity *= interpolate(
-        x,
-        [-width, -width * 0.45, 0, width * 0.45, width],
-        [0.35, 0.88, 1, 0.88, 0.35],
-        Extrapolation.CLAMP
-      );
-
       return {
         opacity,
-        transform: [{ translateY }, { translateX: x }, { rotate: `${rotate}deg` }, { scale }],
+        transform: [{ translateY }, { scale }],
       };
     });
 
@@ -990,66 +667,6 @@ const styles = StyleSheet.create({
   pullRefreshText: {
     fontSize: 11.5,
     fontWeight: '600',
-  },
-  domainPeekBadge: {
-    position: 'absolute',
-    top: '46%',
-    zIndex: 5,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 9999,
-    borderWidth: 1.5,
-    gap: 7,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 7,
-    elevation: 5,
-  },
-  domainPeekRight: {
-    right: 14,
-  },
-  domainPeekLeft: {
-    left: 14,
-  },
-  peekDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  peekCategoryName: {
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.1,
-  },
-  peekEmoji: {
-    fontSize: 15,
-  },
-  floatingDomainBanner: {
-    position: 'absolute',
-    top: 10,
-    alignSelf: 'center',
-    zIndex: 100,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 9999,
-    borderWidth: 1.5,
-    gap: 8,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.22,
-    shadowRadius: 8,
-    elevation: 7,
-  },
-  bannerEmoji: {
-    fontSize: 16,
-  },
-  bannerDomainTitle: {
-    fontSize: 13.5,
-    fontWeight: '800',
-    letterSpacing: 0.2,
   },
   emptyContainer: {
     flex: 1,
