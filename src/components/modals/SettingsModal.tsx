@@ -1,10 +1,14 @@
+import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import {
   AlertCircle,
   ExternalLink,
   FileText,
+  Globe,
   LogIn,
   LogOut,
+  Mail,
+  MessageSquareText,
   Moon,
   Settings,
   Shield,
@@ -33,6 +37,11 @@ import { CATEGORY_LIST } from '../../constants/categories';
 import { useSettingsStore } from '../../store/settingsStore';
 import { ThemeMode, useTheme } from '../../store/themeStore';
 import { useUserStore } from '../../store/userStore';
+
+const SUPPORT_EMAIL = 'hi@zerodaily.in';
+const SUPPORT_MAILTO = 'mailto:hi@zerodaily.in?subject=ZeroDaily%20support';
+const FEEDBACK_URL = 'https://zerodaily.in/feedback';
+const WEBSITE_URL = 'https://zerodaily.in';
 
 interface SettingsModalProps {
   visible: boolean;
@@ -113,6 +122,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
     } catch (error) {
       console.error('[SettingsModal] Error opening URL:', error);
       Alert.alert('Error', 'An unexpected error occurred while attempting to open the link.');
+    }
+  };
+
+  // mailto: is not gated on canOpenURL: on Android 11+ it can return false without
+  // manifest <queries>, even when a mail app is installed. Fall back to copying the address.
+  const handleContactEmail = async () => {
+    try {
+      await Linking.openURL(SUPPORT_MAILTO);
+    } catch (error) {
+      console.error('[SettingsModal] Error opening mail app:', error);
+      await Clipboard.setStringAsync(SUPPORT_EMAIL).catch(() => {});
+      Alert.alert('Contact us', 'Email us at hi@zerodaily.in (copied to clipboard).');
     }
   };
 
@@ -310,6 +331,57 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
               </>
             )}
 
+            {/* Section: Contact & Support */}
+            <Text style={[styles.sectionHeader, { color: colors.textMuted, marginTop: 10 }]}>CONTACT & SUPPORT</Text>
+
+            <TouchableOpacity
+              activeOpacity={0.7}
+              accessibilityRole="link"
+              accessibilityLabel="Contact us by email at hi@zerodaily.in"
+              onPress={handleContactEmail}
+              style={[styles.preferenceRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            >
+              <View style={styles.preferenceLeft}>
+                <Mail size={18} color={colors.textSecondary} />
+                <View>
+                  <Text style={[styles.prefTitle, { color: colors.textPrimary }]}>Contact us</Text>
+                  <Text style={[styles.prefSubtitle, { color: colors.textMuted }]}>hi@zerodaily.in</Text>
+                </View>
+              </View>
+              <ExternalLink size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.7}
+              accessibilityRole="link"
+              accessibilityLabel="Send feedback"
+              onPress={() => handleOpenURL(FEEDBACK_URL)}
+              style={[styles.preferenceRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            >
+              <View style={styles.preferenceLeft}>
+                <MessageSquareText size={18} color={colors.textSecondary} />
+                <Text style={[styles.prefTitle, { color: colors.textPrimary }]}>Send feedback</Text>
+              </View>
+              <ExternalLink size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.7}
+              accessibilityRole="link"
+              accessibilityLabel="Website zerodaily.in"
+              onPress={() => handleOpenURL(WEBSITE_URL)}
+              style={[styles.preferenceRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            >
+              <View style={styles.preferenceLeft}>
+                <Globe size={18} color={colors.textSecondary} />
+                <View>
+                  <Text style={[styles.prefTitle, { color: colors.textPrimary }]}>Website</Text>
+                  <Text style={[styles.prefSubtitle, { color: colors.textMuted }]}>zerodaily.in</Text>
+                </View>
+              </View>
+              <ExternalLink size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+
             {/* Section: Legal & Policies */}
             <Text style={[styles.sectionHeader, { color: colors.textMuted, marginTop: 10 }]}>LEGAL & POLICIES</Text>
 
@@ -345,7 +417,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
             <View style={styles.aboutFooter}>
               <AlertCircle size={14} color={colors.textMuted} />
               <Text style={[styles.aboutText, { color: colors.textMuted }]}>
-                ZeroDaily Mobile • v1.7.0
+                ZeroDaily Mobile • v1.7.1
               </Text>
             </View>
           </ScrollView>
@@ -536,6 +608,10 @@ const styles = StyleSheet.create({
   prefTitle: {
     fontSize: 15,
     fontWeight: '600',
+  },
+  prefSubtitle: {
+    fontSize: 12.5,
+    marginTop: 2,
   },
   aboutFooter: {
     flexDirection: 'row',

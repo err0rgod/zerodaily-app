@@ -52,13 +52,14 @@ describe('SettingsModal Static & AST Analysis', () => {
     expect(fileContent.length).toBeGreaterThan(0);
   });
 
-  test('AST contains exact policy URLs: privacy and terms', () => {
+  test('AST contains exact link URLs: policies, contact email, feedback and website', () => {
     const urls: string[] = [];
 
     function findUrls(node: ts.Node) {
       if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
-        if (node.text.includes('zerodaily.in')) {
-          urls.push(node.text);
+        const text = node.text;
+        if (text.includes('zerodaily.in') && /^(https:\/\/|mailto:)/.test(text)) {
+          urls.push(text);
         }
       }
       ts.forEachChild(node, findUrls);
@@ -67,10 +68,33 @@ describe('SettingsModal Static & AST Analysis', () => {
     findUrls(sourceFile);
     expect(urls).toContain('https://zerodaily.in/privacy');
     expect(urls).toContain('https://zerodaily.in/terms');
-    expect(urls).toHaveLength(2);
+    expect(urls).toContain('https://zerodaily.in/feedback');
+    expect(urls).toContain('https://zerodaily.in');
+    expect(urls).toContain('mailto:hi@zerodaily.in?subject=ZeroDaily%20support');
+    expect(urls).toHaveLength(5);
   });
 
-  test('AST confirms version string is v1.6.3 and strictly no v0.5.4 or 0.5.4 exists', () => {
+  test('Contact & Support section visibly shows the support email', () => {
+    expect(fileContent).toContain('CONTACT & SUPPORT');
+    expect(fileContent).toContain('hi@zerodaily.in');
+
+    // The email must be rendered as visible JSX text, not only used in the mailto link
+    const jsxTexts: string[] = [];
+    function findJsxTexts(node: ts.Node) {
+      if (ts.isJsxText(node)) {
+        const text = node.getText(sourceFile).trim();
+        if (text) jsxTexts.push(text);
+      }
+      ts.forEachChild(node, findJsxTexts);
+    }
+    findJsxTexts(sourceFile);
+    expect(jsxTexts).toContain('hi@zerodaily.in');
+
+    // Contact section sits directly above Legal & Policies
+    expect(fileContent.indexOf('CONTACT & SUPPORT')).toBeLessThan(fileContent.indexOf('LEGAL & POLICIES'));
+  });
+
+  test('AST confirms version string matches package.json and strictly no v0.5.4 or 0.5.4 exists', () => {
     // Assert 0.5.4 does not exist anywhere in the source code
     expect(fileContent).not.toContain('0.5.4');
     expect(fileContent).not.toContain('v0.5.4');
